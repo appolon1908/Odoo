@@ -48,28 +48,31 @@ sequenceDiagram
 flowchart LR
  F["Feature branch"] --> T["Tests / validation"]
  T --> PR["Pull request + review"]
- PR --> CI["CI green"]
- CI --> ST["Staging / isolated verification"]
- ST --> EX["Exact-SHA certification"]
+ PR --> CI["Required CI green"]
+ CI --> MAIN["Protected main merge"]
+ MAIN --> CAND["Immutable candidate from exact verified main SHA"]
+ CAND --> ST["Staging verification using that candidate"]
+ ST --> EX["Readback + exact-SHA certification"]
  EX --> G{"Production approval?"}
  G -- No --> ST
- G -- Yes --> P["Production promotion"]
+ G -- Yes --> P["Promote the same immutable candidate"]
  P --> H["Health/readiness + rollback check"]
 ```
 
 ## 5. Observability and recovery
 ```mermaid
 flowchart LR
- R["Odoo"] --> M["Metrics"]
+ R["Odoo"] --> M["Metrics / monitoring integration where enabled"]
  R --> L["Logs / audit"]
- R --> T["Traces / correlation"]
+ R -. "runtime tracing exporter not yet verified" .-> T["Trace pipeline target only"]
  M --> O["Observability stack"]
  L --> O
- T --> O
  O --> A["Dashboards / alerts"]
- R --> B["Backup / config snapshot"]
+ R --> B["Database + filestore/config recovery point"]
  B --> RR["Restore / rollback rehearsal"]
 ```
+
+> Runtime trace export is **UNVERIFIED** in the current repository authority. Correlation/monitoring contracts do not by themselves prove application tracing is active.
 
 ## Ownership notes
 - **Role:** Odoo 19 CRM/business application authority
