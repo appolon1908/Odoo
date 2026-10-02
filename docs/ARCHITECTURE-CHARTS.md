@@ -1,7 +1,7 @@
 # Odoo — Architecture Charts
 
-> Repository: `appolon1908/Odoo`  
-> Baseline branch: `main`  
+> Repository: `appolon1908/Odoo`
+> Baseline branch: `main`
 > Repository-local visual architecture. Update with every material boundary, persistence, integration or deployment change.
 
 ## 1. System context
