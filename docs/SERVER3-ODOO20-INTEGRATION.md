@@ -14,7 +14,7 @@ Server 3 must consume reviewed Git commits. Do not edit application source insid
 
 ## Odoo 20 runtime
 
-The Server 3 runtime uses the official `odoo:20.0` image with PostgreSQL 16. The existing `custom-addons/` tree was originally certified for Odoo 19. It is mounted read-only into Odoo 20 for migration and compatibility testing, but modules must not be installed or upgraded automatically until their Odoo 20 compatibility tests pass.
+The Server 3 runtime uses reviewed digest-pinned Odoo 20 and PostgreSQL 16 images. The existing `custom-addons/` tree was originally certified for Odoo 19. It is mounted read-only into Odoo 20 for migration and compatibility testing, but modules must not be installed or upgraded automatically until their Odoo 20 compatibility tests pass.
 
 Create the untracked secret file:
 
@@ -23,6 +23,20 @@ cd /srv/codestra/apps/Odoo
 umask 077
 printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env.server3
 ```
+
+Initialize the staging database once before the first start:
+
+```bash
+set -a; . ./.env.server3; set +a
+docker run --rm --network compose_default \\
+  -v compose_odoo20-data:/var/lib/odoo \\
+  -v /srv/codestra/apps/Odoo/custom-addons:/mnt/extra-addons:ro \\
+  --entrypoint odoo \\
+  odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533 \\
+  db --db_host=db --db_port=5432 --db_user=odoo --db_password="$POSTGRES_PASSWORD" init codestra_odoo20_staging
+```
+
+The steady-state server pins the database to `codestra_odoo20_staging` and disables Odoo's database list/manager surface.
 
 Start the isolated stack:
 
