@@ -16,6 +16,7 @@ services:
 
   odoo:
     image: odoo:20.0
+    command: ["odoo", "server", "--http-interface=0.0.0.0"]
     restart: unless-stopped
     depends_on:
       db:
