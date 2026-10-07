@@ -189,6 +189,8 @@ class CrmLead(models.Model):
             vals.pop("team_id", None)
             vals["team_id"] = campaign.crm_team_id.id
         else:
+            if "user_id" not in vals:
+                vals["user_id"] = False
             if vals.get("user_id"):
                 assigned = self.env["callcenter.campaign.assignment"].sudo().search_count([
                     ("campaign_id", "=", campaign.id), ("user_id", "=", vals["user_id"]),
@@ -232,7 +234,7 @@ class CrmLead(models.Model):
                 campaign = self.env["callcenter.campaign"].sudo().browse(campaign_id)
                 vals["team_id"] = campaign.crm_team_id.id
                 phone = vals.get("phone", lead.phone)
-                mobile = vals.get("mobile", lead.mobile)
+                mobile = vals.get("mobile", False)
                 email = vals.get("email_from", lead.email_from)
                 external_id = (vals.get("source_external_id", lead.source_external_id) or "").strip() or False
                 phone_key = self._cc_phone_normalize(phone or mobile)

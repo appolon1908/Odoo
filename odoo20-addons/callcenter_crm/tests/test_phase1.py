@@ -242,7 +242,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         wizard = Wizard.create({
             "campaign_id": self.campaign_a.id,
             "filename": "leads.csv",
-            "upload_file": base64.b64encode(content),
+            "upload_file": base64.b64encode(content).decode(),
         })
         wizard.action_validate()
         batch = wizard.batch_id.sudo()
@@ -262,7 +262,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         duplicate = Wizard.create({
             "campaign_id": self.campaign_a.id,
             "filename": "leads.csv",
-            "upload_file": base64.b64encode(content),
+            "upload_file": base64.b64encode(content).decode(),
         })
         with self.assertRaises(UserError):
             duplicate.action_validate()
@@ -277,7 +277,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         wizard = self.env["callcenter.lead.import.wizard"].with_user(self.ops).create({
             "campaign_id": self.campaign_a.id,
             "filename": "leads.xlsx",
-            "upload_file": base64.b64encode(stream.getvalue()),
+            "upload_file": base64.b64encode(stream.getvalue()).decode(),
         })
         wizard.action_validate()
         self.assertEqual(wizard.batch_id.total_rows, 1)

@@ -111,7 +111,13 @@ class CallCenterLeadImportWizard(models.TransientModel):
         self._ensure_admin()
         if self.campaign_id.state not in {"active", "paused"} or not self.campaign_id.active:
             raise ValidationError(_("Lead imports are allowed only for active or paused campaigns."))
-        raw = base64.b64decode(self.upload_file or b"")
+        binary_value = self.upload_file
+        if hasattr(binary_value, "content"):
+            raw = binary_value.content
+        elif isinstance(binary_value, str):
+            raw = base64.b64decode(binary_value)
+        else:
+            raw = base64.b64decode(binary_value or b"")
         digest = hashlib.sha256(raw).hexdigest()
         previous = self.env["callcenter.lead.import.batch"].sudo().search([
             ("campaign_id", "=", self.campaign_id.id),
