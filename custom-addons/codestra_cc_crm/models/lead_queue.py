@@ -179,6 +179,16 @@ class CrmLeadQueue(models.Model):
                 values["queue_state"] = (
                     "assigned" if values.get("user_id") else "available"
                 )
+            if (
+                governed_requested
+                and values.get("campaign_id")
+                and "cross_campaign_duplicate" not in values
+            ):
+                values["cross_campaign_duplicate"] = self.sudo()._queue_has_cross_campaign_duplicate(
+                    values["campaign_id"],
+                    _phone_key(values.get("phone")),
+                    _email_key(values.get("email_from")),
+                )
             prepared.append(values)
 
         records = super().create(prepared)
@@ -960,9 +970,9 @@ class CallcenterLeadAssignment(models.Model):
             "_cc_assignment_history_capability"
         ) is not ASSIGNMENT_HISTORY_CAPABILITY:
             raise AccessError(_("Lead assignment history is append-only."))
-        allowed = {"released_at", "reason"}
+        allowed = {"released_at"}
         if set(values) - allowed:
-            raise AccessError(_("Only assignment release metadata may be finalized."))
+            raise AccessError(_("Only the assignment release timestamp may be finalized."))
         if "released_at" in values and any(record.released_at for record in self):
             raise AccessError(_("An assignment release timestamp cannot be overwritten."))
         return super().write(values)
@@ -981,10 +991,7 @@ class CallcenterLeadAssignment(models.Model):
             limit=1,
         )
         if assignment:
-            values = {"released_at": fields.Datetime.now()}
-            if reason:
-                values["reason"] = reason
             assignment.with_context(
                 _cc_assignment_history_capability=ASSIGNMENT_HISTORY_CAPABILITY
-            ).write(values)
+            ).write({"released_at": fields.Datetime.now()})
         return True
