@@ -67,6 +67,7 @@ class CrmTeam(models.Model):
         "campaign_id",
         string="Assignment History",
         readonly=True,
+        context={"active_test": False},
     )
 
     _campaign_code_unique = models.Constraint(

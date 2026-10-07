@@ -97,12 +97,17 @@ class TestCallCenterHierarchy(TransactionCase):
 
         agent.action_assign_callcenter_campaign(self.campaign_b)
 
-        history_a = self.env["callcenter.campaign.assignment"].sudo().search(
-            [
+        history_a = (
+            self.env["callcenter.campaign.assignment"]
+            .sudo()
+            .with_context(active_test=False)
+            .search(
+                [
                 ("user_id", "=", self.agent.id),
                 ("campaign_id", "=", self.campaign_a.id),
-                ("role", "=", "agent"),
-            ]
+                    ("role", "=", "agent"),
+                ]
+            )
         )
         active_b = self.env["callcenter.campaign.assignment"].sudo().search(
             [

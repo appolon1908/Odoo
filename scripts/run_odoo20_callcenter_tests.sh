@@ -99,7 +99,7 @@ done
 }
 
 printf '==> Installing and testing %s on Odoo 20\n' "$MODULE"
-if ! docker run --rm   --network "$NETWORK"   -e HOST=db -e PORT=5432 -e USER="$DB_USER" -e PASSWORD="$DB_PASSWORD"   -v "$ADDONS_DIR:/mnt/extra-addons:ro"   "$ODOO_IMAGE"   --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons   -d "$DATABASE"   --init="$MODULE"   --without-demo=all   --test-enable   --test-tags="/$MODULE"   --stop-after-init   --workers=0   --http-interface=127.0.0.1   --log-level=test   2>&1 | tee "$TEST_LOG"; then
+if ! docker run --rm   --network "$NETWORK"   -e HOST=db -e PORT=5432 -e USER="$DB_USER" -e PASSWORD="$DB_PASSWORD"   -v "$ADDONS_DIR:/mnt/extra-addons:ro"   "$ODOO_IMAGE"   --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons   -d "$DATABASE"   --init="$MODULE"   --without-demo   --test-enable   --test-tags="/$MODULE"   --stop-after-init   --workers=0   --http-interface=127.0.0.1   --log-level=test   2>&1 | tee "$TEST_LOG"; then
   printf 'ERROR=ODOO20_SPEC1_INSTALL_OR_TEST_FAILED\n' >&2
   exit 1
 fi
@@ -110,7 +110,7 @@ grep -Eq '0 failed, 0 error\(s\)' "$TEST_LOG" || {
 }
 
 printf '==> Exercising module upgrade path\n'
-if ! docker run --rm   --network "$NETWORK"   -e HOST=db -e PORT=5432 -e USER="$DB_USER" -e PASSWORD="$DB_PASSWORD"   -v "$ADDONS_DIR:/mnt/extra-addons:ro"   "$ODOO_IMAGE"   --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons   -d "$DATABASE"   --update="$MODULE"   --without-demo=all   --stop-after-init   --workers=0   --http-interface=127.0.0.1   --log-level=test   2>&1 | tee "$UPGRADE_LOG"; then
+if ! docker run --rm   --network "$NETWORK"   -e HOST=db -e PORT=5432 -e USER="$DB_USER" -e PASSWORD="$DB_PASSWORD"   -v "$ADDONS_DIR:/mnt/extra-addons:ro"   "$ODOO_IMAGE"   --addons-path=/usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons   -d "$DATABASE"   --update="$MODULE"   --without-demo   --stop-after-init   --workers=0   --http-interface=127.0.0.1   --log-level=test   2>&1 | tee "$UPGRADE_LOG"; then
   printf 'ERROR=ODOO20_SPEC1_UPGRADE_FAILED\n' >&2
   exit 1
 fi
