@@ -423,6 +423,14 @@ class CrmLeadQueue(models.Model):
         if not campaign.active or campaign.lifecycle_state not in QUEUE_ACTIVE_LIFECYCLE_STATES:
             raise UserError(_("The active campaign is not eligible for lead distribution."))
 
+        # Serialize requests from the same membership as well as candidate
+        # leads. Without this lock, a double-click in two concurrent
+        # transactions could claim two different leads for one agent.
+        self.env.cr.execute(
+            "SELECT id FROM cc_campaign_membership WHERE id = %s FOR UPDATE",
+            [membership.id],
+        )
+
         current = self.sudo().search(
             [
                 ("cc_contact_center_record", "=", True),
@@ -630,6 +638,7 @@ class CallcenterLeadImportBatch(models.Model):
             "campaign_id",
             "upload_file",
             "filename",
+            "override_duplicate_file",
         }.intersection(values):
             raise AccessError(_("Validated import source data is immutable."))
         return super().write(values)
@@ -883,13 +892,20 @@ class CallcenterLeadImportBatch(models.Model):
             if not source:
                 source = Source.create({"name": source_name})
             values["source_id"] = source.id
-        team = self.env["crm.team"].sudo().search(
-            [("default_campaign_id", "=", self.campaign_id.legacy_campaign_id.id)],
-            order="id",
-            limit=1,
-        )
-        if team:
-            values["team_id"] = team.id
+        if self.campaign_id.legacy_campaign_id:
+            team = self.env["crm.team"].sudo().search(
+                [
+                    (
+                        "default_campaign_id",
+                        "=",
+                        self.campaign_id.legacy_campaign_id.id,
+                    )
+                ],
+                order="id",
+                limit=1,
+            )
+            if team:
+                values["team_id"] = team.id
         return values
 
 
