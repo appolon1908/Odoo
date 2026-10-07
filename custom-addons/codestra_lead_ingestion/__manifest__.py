@@ -1,6 +1,6 @@
 {
     "name": "Codestra Lead Ingestion",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.1.0",
     "summary": "Governed CRM lead ingestion and middleware delivery control",
     "category": "Sales/CRM",
     "author": "Codestra",
@@ -9,6 +9,7 @@
         "base", "mail", "contacts", "crm",
         "call_center_campaign", "call_center_compliance",
         "call_center_lead_validation", "codestra_integration_hub",
+        "codestra_cc_security",
     ],
     "external_dependencies": {"python": ["openpyxl", "phonenumbers"]},
     "data": [
