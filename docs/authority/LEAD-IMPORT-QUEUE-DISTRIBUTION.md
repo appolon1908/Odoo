@@ -13,6 +13,8 @@ This implementation extends the canonical `crm.lead` record inside `codestra_cc_
 
 Only `codestra_cc_security.group_cc_global_administrator` (the Call Center Super User) may create, validate, or confirm lead-import batches.
 
+The older `codestra_lead_ingestion` addon remains available for its compliance, outbox, and reconciliation history, but its manual batch creation/upload/import path is also gated by the same Call Center Super User authority. Its automatic approved-batch import cron is intentionally a no-op, so it cannot bypass manual confirmation.
+
 CSV and XLSX files are parsed into `callcenter.lead.import.line` audit rows before any lead is created. The selected campaign comes from the batch, never the spreadsheet. Duplicate-file detection uses SHA-256 and requires an explicit override before the same file can be processed again for the same campaign.
 
 Same-campaign duplicate checks use, in order:
@@ -54,7 +56,7 @@ FOR UPDATE SKIP LOCKED
 LIMIT 1
 ```
 
-The row lock prevents two concurrent agents from receiving the same lead.
+The lead-row lock prevents two concurrent agents from receiving the same lead. The active campaign-membership row is locked first, so two concurrent requests from the same agent cannot claim two different leads.
 
 ## Saved-lead lock
 
