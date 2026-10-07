@@ -315,25 +315,21 @@ class CrmLeadQueue(models.Model):
         source_external_id=False,
         exclude_id=False,
     ):
-        params = [campaign_id]
-        exclude_sql = ""
-        if exclude_id:
-            exclude_sql = " AND id != %s"
-            params.append(exclude_id)
+        excluded_id = exclude_id or 0
 
         if source_external_id:
             self.env.cr.execute(
-                f"""
+                """
                     SELECT id
                       FROM crm_lead
                      WHERE campaign_id = %s
                        AND cc_contact_center_record IS TRUE
                        AND active IS TRUE
-                       {exclude_sql}
+                       AND id != %s
                        AND source_external_id = %s
                      LIMIT 1
                 """,
-                params + [str(source_external_id).strip()],
+                [campaign_id, excluded_id, str(source_external_id).strip()],
             )
             row = self.env.cr.fetchone()
             if row:
@@ -341,37 +337,37 @@ class CrmLeadQueue(models.Model):
 
         if normalized_phone:
             self.env.cr.execute(
-                f"""
+                """
                     SELECT id
                       FROM crm_lead
                      WHERE campaign_id = %s
                        AND cc_contact_center_record IS TRUE
                        AND active IS TRUE
-                       {exclude_sql}
+                       AND id != %s
                        AND regexp_replace(
                            COALESCE(normalized_phone, phone_sanitized, phone, ''),
                            '[^0-9]', '', 'g'
                        ) = %s
                      LIMIT 1
                 """,
-                params + [normalized_phone],
+                [campaign_id, excluded_id, normalized_phone],
             )
             row = self.env.cr.fetchone()
             if row:
                 return row[0]
         elif normalized_email:
             self.env.cr.execute(
-                f"""
+                """
                     SELECT id
                       FROM crm_lead
                      WHERE campaign_id = %s
                        AND cc_contact_center_record IS TRUE
                        AND active IS TRUE
-                       {exclude_sql}
+                       AND id != %s
                        AND lower(COALESCE(normalized_email, email_from, '')) = %s
                      LIMIT 1
                 """,
-                params + [normalized_email],
+                [campaign_id, excluded_id, normalized_email],
             )
             row = self.env.cr.fetchone()
             if row:
