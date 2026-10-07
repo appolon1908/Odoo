@@ -18,10 +18,10 @@ The Server 3 runtime uses reviewed digest-pinned Odoo 20 and PostgreSQL 16 image
 
 Odoo 20-compatible modules live in `odoo20-addons/`. The legacy `custom-addons/` tree remains governed by the Odoo 19 validation baseline and is not mounted into the Odoo 20 application container.
 
-The initial Odoo 20 call-center hierarchy module is:
+The authoritative Odoo 20 Phase-1 call-center CRM module is:
 
-- `odoo20-addons/callcenter`
-- security groups: `callcenter.group_callcenter_agent`, `callcenter.group_callcenter_supervisor`, `callcenter.group_callcenter_superuser`
+- `odoo20-addons/callcenter_crm`
+- security groups: `callcenter_crm.group_callcenter_agent`, `callcenter_crm.group_callcenter_supervisor`, `callcenter_crm.group_callcenter_superuser`
 - operational super user remains separate from `base.group_system`
 
 Create the untracked secret file:
@@ -58,7 +58,7 @@ Install or upgrade SPEC-1 only from a reviewed commit:
 set -a; . ./.env.server3; set +a
 docker compose --env-file .env.server3 -f deploy/compose/compose.server3.odoo20.yaml run --rm odoo \
   --database=codestra_odoo20_staging \
-  --init=callcenter \
+  --init=callcenter_crm \
   --stop-after-init
 ```
 

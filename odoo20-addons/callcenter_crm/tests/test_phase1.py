@@ -315,3 +315,15 @@ class TestCallCenterCRMPhase1(TransactionCase):
         target = self.agent_a1
         with self.assertRaises(AccessError):
             target.with_user(self.ops).action_grant_callcenter_superuser()
+
+    def test_19_technical_administrator_retains_campaign_access(self):
+        technical_admin = self.env.ref("base.user_admin")
+        self.assertTrue(technical_admin.has_group("base.group_system"))
+        visible = self.env["callcenter.campaign"].with_user(technical_admin).search([
+            ("id", "=", self.campaign_a.id)
+        ])
+        self.assertEqual(visible, self.campaign_a)
+        native_team = self.env["crm.team"].with_user(technical_admin).search([
+            ("id", "=", self.campaign_a.crm_team_id.id)
+        ])
+        self.assertEqual(native_team, self.campaign_a.crm_team_id)

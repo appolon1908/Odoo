@@ -7,4 +7,4 @@ This directory is the Odoo 20-only addon root for Codestra.
 - Odoo 20 modules are certified only against the digest-pinned Odoo 20 Community runtime.
 - Server 3 mounts this directory read-only as `/mnt/extra-addons`.
 
-The earlier `callcenter` prototype is superseded by `callcenter_crm` and will be removed after the replacement passes the Odoo 20 certification gate.
+`callcenter_crm` is the only call-center authority in the Odoo 20 addon root. The earlier `callcenter` prototype has been removed to prevent competing campaign/security models.

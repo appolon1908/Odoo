@@ -39,6 +39,13 @@ class ResUsers(models.Model):
         self.sudo().write({"group_ids": [Command.link(group.id)]})
         return True
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        users = super().create(vals_list)
+        if "callcenter.campaign" in self.env:
+            users._sync_callcenter_admin_assignments()
+        return users
+
     def write(self, vals):
         result = super().write(vals)
         if "group_ids" in vals and "callcenter.campaign" in self.env:
