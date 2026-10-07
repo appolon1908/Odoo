@@ -146,7 +146,6 @@ class CrmTeamCallCenterCampaign(models.Model):
         "callcenter.campaign.assignment",
         "campaign_id",
         string="Agent Assignment History",
-        readonly=True,
     )
     campaign_state_log_ids = fields.One2many(
         "callcenter.campaign.state.log",
@@ -972,6 +971,10 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     raise AccessError(
                         _("Agents and supervisors may create leads only while the campaign is Active.")
                     )
+                if team.campaign_state != "active" and values.get("user_id"):
+                    raise AccessError(
+                        _("Preloaded leads must remain unassigned until the campaign is Active.")
+                    )
 
                 is_supervisor = self.env.user.has_group(
                     "codestra_cc_security.group_cc_campaign_supervisor"
@@ -1003,10 +1006,6 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                         raise ValidationError(
                             _("The assigned Agent is not active in this campaign.")
                         )
-                elif team.campaign_state != "active" and values.get("user_id"):
-                    raise AccessError(
-                        _("Lead assignment is available only while the campaign is Active.")
-                    )
             prepared.append(values)
         return super().create(prepared)
 
@@ -1070,19 +1069,31 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     raise AccessError(
                         _("Leads cannot be moved into a Closed or archived campaign.")
                     )
-                if values.get("user_id"):
-                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
-                        [
-                            ("campaign_id", "=", target.id),
-                            ("user_id", "=", values["user_id"]),
-                            ("active", "=", True),
-                        ],
-                        limit=1,
+                for lead in self:
+                    effective_user_id = (
+                        values.get("user_id")
+                        if "user_id" in values
+                        else lead.user_id.id
                     )
-                    if not assignment:
-                        raise ValidationError(
-                            _("The assigned Agent is not active in the target campaign.")
+                    if target.campaign_state != "active" and effective_user_id:
+                        raise AccessError(
+                            _("A lead moved into a non-Active campaign must be unassigned.")
                         )
+                    if effective_user_id:
+                        assignment = self.env[
+                            "callcenter.campaign.assignment"
+                        ].sudo().search(
+                            [
+                                ("campaign_id", "=", target.id),
+                                ("user_id", "=", effective_user_id),
+                                ("active", "=", True),
+                            ],
+                            limit=1,
+                        )
+                        if not assignment:
+                            raise ValidationError(
+                                _("The assigned Agent is not active in the target campaign.")
+                            )
         return super().write(values)
 
 

@@ -155,6 +155,70 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
             {"ready", "active", "paused", "closed", "archived"},
         )
 
+    def test_draft_and_paused_preload_stays_unassigned(self):
+        campaign = self._campaign("PRELOAD")
+        self._assign(campaign, self.agent_a)
+        lead = self.env["crm.lead"].with_user(self.superuser).create(
+            {
+                "name": "Draft preload",
+                "team_id": campaign.id,
+            }
+        )
+        self.assertFalse(lead.user_id)
+        with self.assertRaises(AccessError):
+            self.env["crm.lead"].with_user(self.superuser).create(
+                {
+                    "name": "Forbidden assigned preload",
+                    "team_id": campaign.id,
+                    "user_id": self.agent_a.id,
+                }
+            )
+        campaign.with_user(self.superuser).action_callcenter_ready()
+        campaign.with_user(self.superuser).action_callcenter_activate()
+        lead.with_user(self.superuser).write({"user_id": self.agent_a.id})
+        self.assertEqual(lead.user_id, self.agent_a)
+        campaign.with_user(self.superuser).action_callcenter_pause("Client pause")
+        with self.assertRaises(AccessError):
+            lead.with_user(self.superuser).write({"user_id": self.agent_a.id})
+
+    def test_reason_wizard_executes_audited_pause(self):
+        campaign = self._campaign("WIZARD")
+        self._assign(campaign, self.agent_a)
+        campaign.with_user(self.superuser).action_callcenter_ready()
+        campaign.with_user(self.superuser).action_callcenter_activate()
+        wizard = self.env["callcenter.campaign.transition.wizard"].with_user(
+            self.superuser
+        ).create(
+            {
+                "campaign_id": campaign.id,
+                "target_state": "paused",
+                "reason": "Customer requested a temporary pause",
+            }
+        )
+        wizard.action_confirm()
+        self.assertEqual(campaign.campaign_state, "paused")
+        log = campaign.campaign_state_log_ids.filtered(
+            lambda row: row.to_state == "paused"
+        )[:1]
+        self.assertEqual(log.reason, "Customer requested a temporary pause")
+
+    def test_removed_supervisor_keeps_historical_visibility(self):
+        campaign = self._campaign("HISTORY")
+        self.assertIn(self.primary, campaign.supervisor_history_ids)
+        self.assertIn(self.backup, campaign.supervisor_history_ids)
+        campaign.with_user(self.superuser).write(
+            {
+                "user_id": False,
+                "backup_supervisor_ids": [(5, 0, 0)],
+            }
+        )
+        self.assertIn(self.primary, campaign.supervisor_history_ids)
+        self.assertIn(self.backup, campaign.supervisor_history_ids)
+        self.assertEqual(
+            self.Team.with_user(self.backup).search([("id", "=", campaign.id)]),
+            campaign,
+        )
+
     def test_paused_campaign_blocks_new_call_records(self):
         campaign = self._campaign()
         self._assign(campaign, self.agent_a)
