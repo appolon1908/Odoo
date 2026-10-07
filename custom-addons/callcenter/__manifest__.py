@@ -1,0 +1,20 @@
+{
+    "name": "Call Center CRM Hierarchy",
+    "version": "20.0.1.0.0",
+    "category": "Sales/CRM",
+    "summary": "Campaign-scoped call-center hierarchy, roles, and assignment history",
+    "author": "Codestra",
+    "license": "LGPL-3",
+    "depends": ["crm", "sales_team"],
+    "data": [
+        "security/callcenter_security.xml",
+        "security/ir.model.access.csv",
+        "security/record_rules.xml",
+        "views/crm_team_views.xml",
+        "views/res_users_views.xml",
+        "views/campaign_assignment_views.xml",
+        "views/callcenter_menus.xml",
+    ],
+    "installable": True,
+    "application": False,
+}
