@@ -57,6 +57,9 @@
     }
   },
   "additional_justified_roles": {
+    "CALL_CENTER_SUPER_USER": [
+      "codestra_cc_security.group_cc_call_center_superuser"
+    ],
     "QA_ANALYST": [
       "codestra_cc_security.group_cc_quality_analyst"
     ],

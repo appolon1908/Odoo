@@ -29,6 +29,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-approver@example.invalid",
             ["codestra_cc_security.group_cc_global_administrator"],
         )
+        cls.call_center_superuser = cls._create_user(
+            "CRM Call Center Super User",
+            "cc-crm-superuser@example.invalid",
+            ["codestra_cc_security.group_cc_call_center_superuser"],
+        )
+        cls.technical_admin = cls._create_user(
+            "CRM Technical Administrator",
+            "cc-crm-technical-admin@example.invalid",
+            ["codestra_cc_security.group_cc_technical_administrator"],
+        )
         cls.service = cls._create_user(
             "CRM Identity Service",
             "cc-crm-service@example.invalid",
@@ -276,7 +286,13 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(supervisor_created.campaign_id, self.campaign_a)
         self.assertEqual(supervisor_created.user_id, self.agent_a)
 
-        for actor in (self.agent_a, self.supervisor_a, self.service):
+        for actor in (
+            self.agent_a,
+            self.supervisor_a,
+            self.service,
+            self.technical_admin,
+            self.requester,
+        ):
             with self.subTest(actor=actor.login):
                 with self.assertRaises(AccessError):
                     created.with_user(actor).write(
@@ -286,7 +302,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         with self.assertRaises(AccessError):
             created.with_user(self.agent_a).write({"active": False})
 
-        created.with_user(self.requester).write(
+        created.with_user(self.call_center_superuser).write(
             {
                 "name": "Super User corrected lead",
                 "active": False,

@@ -47,6 +47,10 @@ def _is_global_admin(user):
     return user.has_group("codestra_cc_security.group_cc_global_administrator")
 
 
+def _is_call_center_super_user(user):
+    return user.has_group("codestra_cc_security.group_cc_call_center_superuser")
+
+
 def _is_supervisor(user):
     return user.has_group("codestra_cc_security.group_cc_campaign_supervisor")
 
@@ -413,7 +417,7 @@ class CrmLead(models.Model):
 
     def write(self, values):
         saved_call_center_leads = self.filtered("cc_contact_center_record")
-        is_call_center_super_user = _is_global_admin(self.env.user)
+        is_call_center_super_user = _is_call_center_super_user(self.env.user)
         if saved_call_center_leads and not is_call_center_super_user:
             raise AccessError(
                 _(
