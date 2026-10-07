@@ -13,6 +13,7 @@
         "crm",
         "mail",
     ],
+    "external_dependencies": {"python": ["openpyxl"]},
     "data": [
         "security/crm_security.xml",
         "security/ir.model.access.csv",
