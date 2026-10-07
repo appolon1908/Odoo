@@ -4,7 +4,7 @@
     <field name="name">Call Center CRM Team: campaign visibility boundary</field>
     <field name="model_id" ref="sales_team.model_crm_team"/>
     <field name="global" eval="True"/>
-    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.cc_has_active_break_glass else ['|', ('is_callcenter_campaign', '=', False), '|', ('campaign_assignment_ids.user_id', '=', user.id), '|', ('user_id', '=', user.id), ('backup_supervisor_ids', 'in', user.id)]</field>
+    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.cc_has_active_break_glass else ['|', ('is_callcenter_campaign', '=', False), '|', ('campaign_assignment_ids.user_id', '=', user.id), ('supervisor_history_ids', 'in', user.id)]</field>
   </record>
 
   <record id="rule_callcenter_assignment_agent_campaign" model="ir.rule">
@@ -17,7 +17,7 @@
     <field name="name">Call Center Assignment: supervisors see supervised campaigns</field>
     <field name="model_id" ref="model_callcenter_campaign_assignment"/>
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_supervisor'))]"/>
-    <field name="domain_force">['|', ('campaign_id.user_id', '=', user.id), ('campaign_id.backup_supervisor_ids', 'in', user.id)]</field>
+    <field name="domain_force">[('campaign_id.supervisor_history_ids', 'in', user.id)]</field>
   </record>
   <record id="rule_callcenter_assignment_admin_all" model="ir.rule">
     <field name="name">Call Center Assignment: Super User all campaigns</field>
@@ -36,7 +36,7 @@
     <field name="name">Call Center State Log: supervisors see supervised history</field>
     <field name="model_id" ref="model_callcenter_campaign_state_log"/>
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_supervisor'))]"/>
-    <field name="domain_force">['|', ('campaign_id.user_id', '=', user.id), ('campaign_id.backup_supervisor_ids', 'in', user.id)]</field>
+    <field name="domain_force">[('campaign_id.supervisor_history_ids', 'in', user.id)]</field>
   </record>
   <record id="rule_callcenter_state_log_admin_all" model="ir.rule">
     <field name="name">Call Center State Log: Super User all history</field>

@@ -98,3 +98,18 @@ Ready or Paused, but not after Closed/Archived.
 Every lifecycle transition is appended to
 `callcenter.campaign.state.log` with campaign, from/to state, actor, time and
 reason. Audit rows are immutable and cannot be deleted.
+
+
+## UI enforcement
+
+The shared campaign form is read-only for Agents and Supervisors. A separate
+Administration tab and lifecycle controls are visible only to the Call Center
+Super User. Pause, Close and Archive open a reason wizard; the reason is
+required before the transition can execute.
+
+## Supervisor history
+
+`supervisor_history_ids` accumulates every Primary and Backup Supervisor ever
+assigned to the native campaign. It is system-maintained and supports
+historical read visibility even after a supervisor is removed from current
+configuration.

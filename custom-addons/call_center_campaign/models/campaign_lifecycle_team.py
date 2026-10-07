@@ -23,6 +23,7 @@ CALLCENTER_LIFECYCLE_CAPABILITY = object()
 CALLCENTER_ASSIGNMENT_CAPABILITY = object()
 CALLCENTER_STATE_LOG_CAPABILITY = object()
 CALLCENTER_NATIVE_MEMBER_CAPABILITY = object()
+CALLCENTER_SUPERVISOR_HISTORY_CAPABILITY = object()
 CALLCENTER_CONFIG_FIELDS = {
     "name",
     "user_id",
@@ -153,6 +154,15 @@ class CrmTeamCallCenterCampaign(models.Model):
         string="Campaign State Audit",
         readonly=True,
     )
+    supervisor_history_ids = fields.Many2many(
+        "res.users",
+        "crm_team_callcenter_supervisor_history_rel",
+        "team_id",
+        "user_id",
+        string="Supervisor History",
+        readonly=True,
+        copy=False,
+    )
     callcenter_operational = fields.Boolean(
         compute="_compute_callcenter_operational",
         string="Operational",
@@ -221,7 +231,9 @@ class CrmTeamCallCenterCampaign(models.Model):
                 values.setdefault("active", True)
             prepared.append(values)
         teams = super().create(prepared)
-        teams.filtered("is_callcenter_campaign")._check_callcenter_configuration()
+        governed = teams.filtered("is_callcenter_campaign")
+        governed._check_callcenter_configuration()
+        governed._sync_callcenter_supervisor_history()
         return teams
 
     def write(self, values):
@@ -235,6 +247,10 @@ class CrmTeamCallCenterCampaign(models.Model):
                 raise AccessError(
                     _("A governed call-center campaign cannot be converted back to a normal team.")
                 )
+            if "supervisor_history_ids" in values and self.env.context.get(
+                "_callcenter_supervisor_history_capability"
+            ) is not CALLCENTER_SUPERVISOR_HISTORY_CAPABILITY:
+                raise AccessError(_("Supervisor history is system-maintained."))
             if "member_ids" in values and self.env.context.get(
                 "_callcenter_native_member_capability"
             ) is not CALLCENTER_NATIVE_MEMBER_CAPABILITY:
@@ -280,9 +296,25 @@ class CrmTeamCallCenterCampaign(models.Model):
                 if canonical:
                     values = dict(values)
                     values["default_campaign_id"] = canonical.legacy_campaign_id.id
+        supervisor_scope_changed = bool(
+            {"user_id", "backup_supervisor_ids"}.intersection(values)
+        )
         result = super().write(values)
         governed._check_callcenter_configuration()
+        if supervisor_scope_changed:
+            governed._sync_callcenter_supervisor_history()
         return result
+
+    def _sync_callcenter_supervisor_history(self):
+        for team in self.filtered("is_callcenter_campaign"):
+            history = team.supervisor_history_ids | team.backup_supervisor_ids
+            if team.user_id:
+                history |= team.user_id
+            team.with_context(
+                _callcenter_supervisor_history_capability=(
+                    CALLCENTER_SUPERVISOR_HISTORY_CAPABILITY
+                )
+            ).write({"supervisor_history_ids": [(6, 0, history.ids)]})
 
     def unlink(self):
         if any(self.mapped("is_callcenter_campaign")):
@@ -527,6 +559,29 @@ class CrmTeamCallCenterCampaign(models.Model):
             "active", _("Campaign activated")
         )
 
+    def _callcenter_transition_wizard(self, target_state):
+        self.ensure_one()
+        self._require_callcenter_superuser()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Campaign Transition"),
+            "res_model": "callcenter.campaign.transition.wizard",
+            "view_mode": "form",
+            "view_id": self.env.ref(
+                "call_center_campaign.view_callcenter_campaign_transition_wizard_form"
+            ).id,
+            "target": "new",
+            "context": {
+                "default_campaign_id": self.id,
+                "default_target_state": target_state,
+            },
+        }
+
+    def action_open_callcenter_pause_wizard(self):
+        if self.campaign_state != "active":
+            raise ValidationError(_("Only an Active campaign can be paused."))
+        return self._callcenter_transition_wizard("paused")
+
     def action_callcenter_pause(self, reason=None):
         return self._transition_callcenter_campaign("paused", reason)
 
@@ -535,8 +590,18 @@ class CrmTeamCallCenterCampaign(models.Model):
             "active", _("Campaign resumed")
         )
 
+    def action_open_callcenter_close_wizard(self):
+        if self.campaign_state not in {"active", "paused"}:
+            raise ValidationError(_("Only an Active or Paused campaign can be closed."))
+        return self._callcenter_transition_wizard("closed")
+
     def action_callcenter_close(self, reason=None):
         return self._transition_callcenter_campaign("closed", reason)
+
+    def action_open_callcenter_archive_wizard(self):
+        if self.campaign_state != "closed" or not self.active:
+            raise ValidationError(_("Only an active Closed campaign can be archived."))
+        return self._callcenter_transition_wizard("archived")
 
     def action_callcenter_archive(self, reason=None):
         self._require_callcenter_superuser()
@@ -566,6 +631,17 @@ class CrmTeamCallCenterCampaign(models.Model):
         if new_code:
             duplicate.write({"campaign_code": new_code})
         return duplicate
+
+    def action_duplicate_callcenter_campaign_ui(self):
+        duplicate = self.action_duplicate_callcenter_campaign()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("New Campaign Draft"),
+            "res_model": "crm.team",
+            "res_id": duplicate.id,
+            "view_mode": "form",
+            "target": "current",
+        }
 
     def action_assign_callcenter_agent(
         self, user_id, is_primary=True, date_from=None
@@ -888,13 +964,48 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     raise AccessError(
                         _("Closed or archived campaigns cannot receive new leads.")
                     )
-                if (
+                operational = (
                     _is_operational_user(self.env.user)
                     and not _is_callcenter_superuser(self.env.user)
-                    and team.campaign_state != "active"
-                ):
+                )
+                if operational and team.campaign_state != "active":
                     raise AccessError(
-                        _("Agents may create leads only while the campaign is Active.")
+                        _("Agents and supervisors may create leads only while the campaign is Active.")
+                    )
+
+                is_supervisor = self.env.user.has_group(
+                    "codestra_cc_security.group_cc_campaign_supervisor"
+                )
+                if operational and not is_supervisor:
+                    if values.get("user_id") and values["user_id"] != self.env.user.id:
+                        raise AccessError(_("Agents may create leads only for themselves."))
+                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
+                        [
+                            ("campaign_id", "=", team.id),
+                            ("user_id", "=", self.env.user.id),
+                            ("active", "=", True),
+                        ],
+                        limit=1,
+                    )
+                    if not assignment:
+                        raise AccessError(_("An active campaign assignment is required."))
+                    values["user_id"] = self.env.user.id
+                elif values.get("user_id"):
+                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
+                        [
+                            ("campaign_id", "=", team.id),
+                            ("user_id", "=", values["user_id"]),
+                            ("active", "=", True),
+                        ],
+                        limit=1,
+                    )
+                    if not assignment:
+                        raise ValidationError(
+                            _("The assigned Agent is not active in this campaign.")
+                        )
+                elif team.campaign_state != "active" and values.get("user_id"):
+                    raise AccessError(
+                        _("Lead assignment is available only while the campaign is Active.")
                     )
             prepared.append(values)
         return super().create(prepared)
@@ -915,18 +1026,63 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                 raise AccessError(
                     _("Operational lead work is blocked unless the campaign is Active.")
                 )
-            if "user_id" in values and any(
-                lead.team_id.campaign_state == "closed" for lead in governed
-            ):
-                raise AccessError(_("Closed campaign leads cannot be reassigned."))
+            if "user_id" in values:
+                if any(
+                    lead.team_id.campaign_state != "active" or not lead.team_id.active
+                    for lead in governed
+                ):
+                    raise AccessError(
+                        _("Lead assignment is available only while the campaign is Active.")
+                    )
+                if values.get("user_id"):
+                    for lead in governed:
+                        assignment = self.env[
+                            "callcenter.campaign.assignment"
+                        ].sudo().search(
+                            [
+                                ("campaign_id", "=", lead.team_id.id),
+                                ("user_id", "=", values["user_id"]),
+                                ("active", "=", True),
+                            ],
+                            limit=1,
+                        )
+                        if not assignment:
+                            raise ValidationError(
+                                _("The assigned Agent is not active in this campaign.")
+                            )
 
-        if values.get("team_id"):
+        if "team_id" in values:
             target = self.env["crm.team"].browse(values["team_id"]).exists()
+            for lead in self:
+                source = lead.team_id
+                if (
+                    source
+                    and source.is_callcenter_campaign
+                    and target
+                    and target != source
+                    and not _is_callcenter_superuser(self.env.user)
+                ):
+                    raise AccessError(
+                        _("Only the Call Center Super User may move a lead to another campaign.")
+                    )
             if target and target.is_callcenter_campaign:
                 if target.campaign_state == "closed" or not target.active:
                     raise AccessError(
                         _("Leads cannot be moved into a Closed or archived campaign.")
                     )
+                if values.get("user_id"):
+                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
+                        [
+                            ("campaign_id", "=", target.id),
+                            ("user_id", "=", values["user_id"]),
+                            ("active", "=", True),
+                        ],
+                        limit=1,
+                    )
+                    if not assignment:
+                        raise ValidationError(
+                            _("The assigned Agent is not active in the target campaign.")
+                        )
         return super().write(values)
 
 
@@ -952,3 +1108,44 @@ class VicidialCallCallCenterLifecycleGate(models.Model):
                     )
                 )
         return super().create(values_list)
+
+
+class CallCenterCampaignTransitionWizard(models.TransientModel):
+    _name = "callcenter.campaign.transition.wizard"
+    _description = "Call Center Campaign Transition Reason"
+
+    campaign_id = fields.Many2one(
+        "crm.team",
+        required=True,
+        readonly=True,
+        ondelete="cascade",
+    )
+    target_state = fields.Selection(
+        [
+            ("paused", "Paused"),
+            ("closed", "Closed"),
+            ("archived", "Archived"),
+        ],
+        required=True,
+        readonly=True,
+    )
+    reason = fields.Text(required=True)
+
+    def action_confirm(self):
+        self.ensure_one()
+        if not _is_callcenter_superuser(self.env.user):
+            raise AccessError(
+                _("Only the Call Center Super User may change campaign lifecycle.")
+            )
+        reason = str(self.reason or "").strip()
+        if not reason:
+            raise ValidationError(_("A transition reason is required."))
+        if self.target_state == "paused":
+            self.campaign_id.action_callcenter_pause(reason)
+        elif self.target_state == "closed":
+            self.campaign_id.action_callcenter_close(reason)
+        elif self.target_state == "archived":
+            self.campaign_id.action_callcenter_archive(reason)
+        else:
+            raise ValidationError(_("Unsupported campaign transition."))
+        return {"type": "ir.actions.act_window_close"}

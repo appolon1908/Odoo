@@ -23,7 +23,7 @@
     "call_center_campaign": {
       "classification": "CANONICAL",
       "domain": "campaign",
-      "rationale": "Physical campaign and integration authority plus the governed native crm.team operational campaign facade, assignment history, lifecycle audit, and active-state call gate. Runtime provider provisioning authority remains in codestra_campaign_control_plane.",
+      "rationale": "Physical campaign and integration authority plus the governed native crm.team operational campaign facade, Agent assignment history, supervisor history, reason-gated lifecycle audit, and Active-state lead/call gate. Runtime provider provisioning authority remains in codestra_campaign_control_plane.",
       "version": "19.0.6.0.0",
       "models": [
         "call.center.campaign",
@@ -37,6 +37,7 @@
         "call.center.team",
         "callcenter.campaign.assignment",
         "callcenter.campaign.state.log",
+        "callcenter.campaign.transition.wizard",
         "codestra.disposition",
         "codestra.integration.callback.nonce",
         "codestra.integration.result.inbox",
