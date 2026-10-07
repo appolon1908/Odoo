@@ -23,8 +23,8 @@
     "call_center_campaign": {
       "classification": "CANONICAL",
       "domain": "campaign",
-      "rationale": "Physical campaign record (call.center.campaign), Middleware integration API for the shared contract, runtime integration outbox/inbox, traces and nonces. Automatic design provisioning is present but its outbox cron ships inactive and unloaded; runtime provisioning authority belongs to the control plane.",
-      "version": "19.0.5.4.0",
+      "rationale": "Physical campaign and integration authority plus the governed native crm.team operational campaign facade, assignment history, lifecycle audit, and active-state call gate. Runtime provider provisioning authority remains in codestra_campaign_control_plane.",
+      "version": "19.0.6.0.0",
       "models": [
         "call.center.campaign",
         "call.center.campaign.country.policy",
@@ -35,6 +35,8 @@
         "call.center.script",
         "call.center.skill.requirement",
         "call.center.team",
+        "callcenter.campaign.assignment",
+        "callcenter.campaign.state.log",
         "codestra.disposition",
         "codestra.integration.callback.nonce",
         "codestra.integration.result.inbox",

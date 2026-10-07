@@ -299,6 +299,21 @@
         "RETRY",
         "DEAD_LETTER"
       ]
+    },
+    "crm_team_campaign_lifecycle": {
+      "model": "crm.team",
+      "field": "campaign_state",
+      "module": "call_center_campaign",
+      "code_constant": "CALLCENTER_TEAM_CAMPAIGN_STATES",
+      "transition_constant": "CALLCENTER_TEAM_TRANSITIONS",
+      "owner": "operational_facade",
+      "states": [
+        "draft",
+        "ready",
+        "active",
+        "paused",
+        "closed"
+      ]
     }
   }
 }
