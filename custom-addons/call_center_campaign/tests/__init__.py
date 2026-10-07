@@ -7,3 +7,4 @@ from . import test_outbox
 from . import test_result_inbox
 from . import test_telephony_intent
 from . import test_automation_results
+from . import test_crm_team_campaign_lifecycle
