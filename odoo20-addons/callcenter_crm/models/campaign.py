@@ -81,24 +81,28 @@ class CallCenterCampaign(models.Model):
                 "assignment_optout": True,
             })
             vals["crm_team_id"] = team.id
+            if self.sudo().with_context(active_test=False).search_count([("code", "=", vals["code"])]):
+                raise ValidationError(_("Campaign code must be unique."))
             record = super(CallCenterCampaign, self).create(vals)
             team.sudo().write({"cc_campaign_id": record.id, "assignment_optout": True})
+            record._sync_admin_assignments()
             record._validate_supervisors()
             record._sync_supervisor_assignments()
-            record._sync_admin_assignments()
             records |= record
         return records
 
     def write(self, vals):
         if not self._can_manage():
             raise AccessError(_("Only the Call Center Super User or technical administrator may modify campaigns."))
-        if ("state" in vals or "active" in vals) and not (
-            self.env.is_superuser() or self.env.user.has_group("base.group_system")
-        ):
+        if ("state" in vals or "active" in vals) and not self.env.is_superuser():
             raise AccessError(_("Use the campaign lifecycle actions instead of writing state or archive flags directly."))
         vals = dict(vals)
         if "code" in vals:
             vals["code"] = (vals["code"] or "").strip().upper()
+            if self.sudo().with_context(active_test=False).search_count([
+                ("id", "not in", self.ids), ("code", "=", vals["code"])
+            ]):
+                raise ValidationError(_("Campaign code must be unique."))
         result = super().write(vals)
         self._validate_supervisors()
         sync_fields = {"name", "primary_supervisor_id", "company_id"}
@@ -170,6 +174,41 @@ class CallCenterCampaign(models.Model):
                         "date_from": now, "assigned_by_id": self.env.user.id,
                     })
             campaign._sync_native_team()
+
+    def action_assign_agent(self, user, effective_at=None):
+        self.ensure_one()
+        if not self._can_manage():
+            raise AccessError(_("Only call-center administration may assign or transfer agents."))
+        if self.state == "closed" or not self.active:
+            raise ValidationError(_("Closed or archived campaigns cannot receive new agent assignments."))
+        if not user or user._name != "res.users" or len(user) != 1:
+            raise ValidationError(_("A single internal user is required."))
+        if not user.active or user.share or not user.has_group("callcenter_crm.group_callcenter_agent"):
+            raise ValidationError(_("The selected user must be an active Call Center Agent."))
+        when = effective_at or fields.Datetime.now()
+        Assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(active_test=False)
+        existing = Assignment.search([
+            ("user_id", "=", user.id), ("role", "=", "agent"), ("active", "=", True)
+        ])
+        if existing:
+            existing.action_close(when)
+        return Assignment.create({
+            "campaign_id": self.id, "user_id": user.id, "role": "agent",
+            "is_primary": True, "date_from": when, "assigned_by_id": self.env.user.id,
+        })
+
+    def action_remove_agent(self, user, effective_at=None):
+        self.ensure_one()
+        if not self._can_manage():
+            raise AccessError(_("Only call-center administration may remove agents."))
+        Assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(active_test=False)
+        rows = Assignment.search([
+            ("campaign_id", "=", self.id), ("user_id", "=", user.id),
+            ("role", "=", "agent"), ("active", "=", True)
+        ])
+        if rows:
+            rows.action_close(effective_at or fields.Datetime.now())
+        return True
 
     def _sync_admin_assignments(self):
         Assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(active_test=False)

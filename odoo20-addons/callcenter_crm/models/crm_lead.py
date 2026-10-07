@@ -156,6 +156,10 @@ class CrmLead(models.Model):
         )
 
         source = False
+        if (
+            campaign.state == "closed" or not campaign.active
+        ) and not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+            raise AccessError(_("Closed or archived campaigns cannot receive new leads."))
         if not self._cc_is_superuser():
             if campaign.state != "active":
                 raise AccessError(_("Agents and supervisors may create leads only in an active campaign."))
@@ -171,6 +175,12 @@ class CrmLead(models.Model):
                 vals["user_id"] = False
                 vals["queue_state"] = "available"
             elif agent:
+                existing_current = self.sudo().search([
+                    ("cc_campaign_id", "!=", False), ("user_id", "=", self.env.user.id),
+                    ("queue_state", "=", "assigned"), ("active", "=", True),
+                ], limit=1)
+                if existing_current:
+                    raise ValidationError(_("Finish or release the current lead before creating another assigned lead."))
                 vals["user_id"] = self.env.user.id
                 vals["queue_state"] = "assigned"
                 source = "manual_agent_creation"
@@ -179,6 +189,13 @@ class CrmLead(models.Model):
             vals.pop("team_id", None)
             vals["team_id"] = campaign.crm_team_id.id
         else:
+            if vals.get("user_id"):
+                assigned = self.env["callcenter.campaign.assignment"].sudo().search_count([
+                    ("campaign_id", "=", campaign.id), ("user_id", "=", vals["user_id"]),
+                    ("role", "=", "agent"), ("active", "=", True),
+                ])
+                if not assigned:
+                    raise ValidationError(_("Assigned agents must have an active assignment to the lead campaign."))
             vals.setdefault("queue_state", "assigned" if vals.get("user_id") else "available")
         return vals, campaign, source
 
@@ -201,6 +218,11 @@ class CrmLead(models.Model):
         if callcenter_records and not self._cc_is_superuser():
             raise AccessError(_("Saved call-center leads may only be edited by a Call Center Super User."))
         vals = dict(vals)
+        identity_fields = {"cc_campaign_id", "phone", "mobile", "email_from", "source_external_id", "user_id"}
+        if len(callcenter_records) > 1 and identity_fields.intersection(vals):
+            for lead in self:
+                lead.write(vals)
+            return True
         old_users = {lead.id: lead.user_id.id for lead in self}
         old_campaigns = {lead.id: lead.cc_campaign_id.id for lead in self}
 
@@ -226,6 +248,14 @@ class CrmLead(models.Model):
                 vals["cross_campaign_duplicate"] = self._cc_has_cross_campaign_duplicate(
                     campaign_id, phone_key, email_key, external_id, exclude_ids=self.ids
                 )
+                target_user_id = vals.get("user_id", lead.user_id.id)
+                if target_user_id:
+                    assigned = self.env["callcenter.campaign.assignment"].sudo().search_count([
+                        ("campaign_id", "=", campaign_id), ("user_id", "=", target_user_id),
+                        ("role", "=", "agent"), ("active", "=", True),
+                    ])
+                    if not assigned:
+                        raise ValidationError(_("Assigned agents must have an active assignment to the lead campaign."))
                 break
 
         result = super().write(vals)

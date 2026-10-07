@@ -56,8 +56,22 @@ class CallCenterCampaignAssignment(models.Model):
         if not self._can_manage():
             raise AccessError(_("Only call-center administration may create campaign assignments."))
         for vals in vals_list:
-            if vals.get("role") == "agent":
+            role = vals.get("role")
+            if role == "agent":
                 vals["is_primary"] = True
+                campaign = self.env["callcenter.campaign"].sudo().browse(vals.get("campaign_id"))
+                if not campaign.active or campaign.state == "closed":
+                    raise ValidationError(_("Closed or archived campaigns cannot receive active agent assignments."))
+                if vals.get("active", True) and self.sudo().search_count([
+                    ("user_id", "=", vals.get("user_id")), ("role", "=", "agent"), ("active", "=", True)
+                ]):
+                    raise ValidationError(_("An agent may have only one active call-center campaign."))
+            if role == "supervisor" and vals.get("is_primary") and vals.get("active", True):
+                if self.sudo().search_count([
+                    ("campaign_id", "=", vals.get("campaign_id")), ("role", "=", "supervisor"),
+                    ("is_primary", "=", True), ("active", "=", True)
+                ]):
+                    raise ValidationError(_("A campaign may have only one active primary supervisor."))
             vals.setdefault("assigned_by_id", self.env.user.id)
         records = super().create(vals_list)
         records._validate_role_groups()

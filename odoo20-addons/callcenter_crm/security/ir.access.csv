@@ -1,7 +1,8 @@
 id,name,model_id,group_id/id,operation,domain
 cc_campaign_agent,Call Center campaign agent read,model_callcenter_campaign,callcenter_crm.group_callcenter_agent,r,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','agent'),('active','=',True)])]"
 cc_campaign_supervisor,Call Center campaign supervisor read,model_callcenter_campaign,callcenter_crm.group_callcenter_supervisor,r,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
-cc_campaign_superuser,Call Center campaign superuser,model_callcenter_campaign,callcenter_crm.group_callcenter_superuser,cru,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_campaign_superuser_create,Call Center campaign superuser create,model_callcenter_campaign,callcenter_crm.group_callcenter_superuser,c,
+cc_campaign_superuser_read_update,Call Center campaign superuser read update,model_callcenter_campaign,callcenter_crm.group_callcenter_superuser,ru,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
 cc_campaign_system,Call Center campaign technical admin,model_callcenter_campaign,base.group_system,crud,
 cc_assignment_agent,Campaign assignment own history,model_callcenter_campaign_assignment,callcenter_crm.group_callcenter_agent,r,"[('user_id','=',user.id)]"
 cc_assignment_supervisor,Campaign assignment supervised campaigns,model_callcenter_campaign_assignment,callcenter_crm.group_callcenter_supervisor,r,"['|',('user_id','=',user.id),('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"

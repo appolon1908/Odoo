@@ -1,9 +1,9 @@
-name: Odoo 20 Call Center CI
+name: Odoo 20 Call Center CRM CI
 
 on:
   pull_request:
     paths:
-      - "odoo20-addons/callcenter/**"
+      - "odoo20-addons/callcenter_crm/**"
       - "odoo20-addons/README.md"
       - "scripts/run_odoo20_callcenter_tests.sh"
       - "deploy/compose/compose.server3.odoo20.yaml"
@@ -14,7 +14,7 @@ on:
       - development
       - main
     paths:
-      - "odoo20-addons/callcenter/**"
+      - "odoo20-addons/callcenter_crm/**"
       - "odoo20-addons/README.md"
       - "scripts/run_odoo20_callcenter_tests.sh"
       - "deploy/compose/compose.server3.odoo20.yaml"
@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   certify-spec-1:
-    name: Certify SPEC-1 on Odoo 20
+    name: Certify SPEC-1 CRM Core on Odoo 20
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 

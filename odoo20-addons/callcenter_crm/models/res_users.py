@@ -51,7 +51,6 @@ class ResUsers(models.Model):
         cc_group = self.env.ref("callcenter_crm.group_callcenter_superuser")
         sys_group = self.env.ref("base.group_system")
         campaigns = Campaign.search([])
-        now = self.env["ir.fields.converter"]._datetime_to_string if False else None
         from odoo import fields
         close_at = fields.Datetime.now()
         for user in self:

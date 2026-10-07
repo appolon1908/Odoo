@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 ADDONS_DIR="$ROOT_DIR/odoo20-addons"
-MODULE="callcenter"
+MODULE="callcenter_crm"
 ODOO_IMAGE="${ODOO20_CI_IMAGE:-odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533}"
 POSTGRES_IMAGE="${ODOO20_POSTGRES_IMAGE:-postgres@sha256:65b16a8b326e0cfbdf33fa7e783f2a0cb352a61448616ccccfd616ef42aa0f65}"
 RUN_ID="$(printf '%s' "${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$" | tr -cd 'A-Za-z0-9_.-')"
