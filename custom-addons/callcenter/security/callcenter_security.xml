@@ -17,10 +17,7 @@
         <field name="name">Agent</field>
         <field name="sequence">10</field>
         <field name="privilege_id" ref="res_groups_privilege_callcenter"/>
-        <field name="implied_ids" eval="[
-            Command.link(ref('base.group_user')),
-            Command.link(ref('sales_team.group_sale_salesman'))
-        ]"/>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
         <field name="comment">Access assigned campaign CRM leads and own campaign history.</field>
     </record>
 
@@ -36,10 +33,7 @@
         <field name="name">Call Center Super User</field>
         <field name="sequence">30</field>
         <field name="privilege_id" ref="res_groups_privilege_callcenter"/>
-        <field name="implied_ids" eval="[
-            Command.link(ref('group_callcenter_supervisor')),
-            Command.link(ref('sales_team.group_sale_manager'))
-        ]"/>
+        <field name="implied_ids" eval="[Command.link(ref('group_callcenter_supervisor'))]"/>
         <field name="comment">Operational authority across all call-center campaigns without technical system-administrator access.</field>
     </record>
 </odoo>

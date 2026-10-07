@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_callcenter_assignment_agent,callcenter assignment agent,model_callcenter_campaign_assignment,callcenter.group_callcenter_agent,1,0,0,0
-access_callcenter_assignment_supervisor,callcenter assignment supervisor,model_callcenter_campaign_assignment,callcenter.group_callcenter_supervisor,1,0,0,0
-access_callcenter_assignment_superuser,callcenter assignment superuser,model_callcenter_campaign_assignment,callcenter.group_callcenter_superuser,1,1,1,0
-access_callcenter_assignment_system,callcenter assignment system,model_callcenter_campaign_assignment,base.group_system,1,1,1,0

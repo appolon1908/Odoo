@@ -70,6 +70,9 @@ class TestCallCenterHierarchy(TransactionCase):
             self.ops_superuser.has_group("callcenter.group_callcenter_superuser")
         )
         self.assertFalse(self.ops_superuser.has_group("base.group_system"))
+        self.assertFalse(
+            self.ops_superuser.has_group("sales_team.group_sale_manager")
+        )
 
     def test_agent_transfer_preserves_assignment_history(self):
         agent = self.agent.with_user(self.ops_superuser)
@@ -156,8 +159,8 @@ class TestCallCenterHierarchy(TransactionCase):
 
     def test_agent_cannot_transfer_self(self):
         with self.assertRaises(AccessError):
-            self.agent.with_user(self.agent).write(
-                {"callcenter_primary_campaign_id": self.campaign_a.id}
+            self.agent.with_user(self.agent).action_assign_callcenter_campaign(
+                self.campaign_a
             )
 
     def test_primary_supervisor_cannot_also_be_backup(self):
@@ -169,3 +172,26 @@ class TestCallCenterHierarchy(TransactionCase):
                     ]
                 }
             )
+
+    def test_campaign_lead_visibility_is_scoped(self):
+        self.agent.with_user(self.ops_superuser).action_assign_callcenter_campaign(
+            self.campaign_a
+        )
+        Lead = self.env["crm.lead"].with_user(self.ops_superuser)
+        lead_a = Lead.create(
+            {
+                "name": "Campaign A Lead",
+                "team_id": self.campaign_a.id,
+            }
+        )
+        lead_b = Lead.create(
+            {
+                "name": "Campaign B Lead",
+                "team_id": self.campaign_b.id,
+            }
+        )
+
+        visible = self.env["crm.lead"].with_user(self.agent).search(
+            [("id", "in", [lead_a.id, lead_b.id])]
+        )
+        self.assertEqual(visible, lead_a)

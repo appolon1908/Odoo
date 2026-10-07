@@ -1,6 +1,6 @@
 {
     "name": "Call Center CRM Hierarchy",
-    "version": "20.0.1.0.0",
+    "version": "20.0.1.1.0",
     "category": "Sales/CRM",
     "summary": "Campaign-scoped call-center hierarchy, roles, and assignment history",
     "author": "Codestra",
@@ -8,10 +8,10 @@
     "depends": ["crm", "sales_team"],
     "data": [
         "security/callcenter_security.xml",
-        "security/ir.model.access.csv",
-        "security/record_rules.xml",
+        "security/ir.access.csv",
         "views/crm_team_views.xml",
         "views/res_users_views.xml",
+        "wizard/agent_transfer_views.xml",
         "views/campaign_assignment_views.xml",
         "views/callcenter_menus.xml",
     ],

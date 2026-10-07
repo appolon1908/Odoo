@@ -55,13 +55,10 @@ class CrmTeam(models.Model):
         readonly=True,
     )
 
-    _sql_constraints = [
-        (
-            "callcenter_campaign_code_unique",
-            "unique(campaign_code)",
-            "Campaign code must be unique.",
-        ),
-    ]
+    _campaign_code_unique = models.Constraint(
+        "UNIQUE(campaign_code)",
+        "Campaign code must be unique.",
+    )
 
     @api.constrains(
         "is_callcenter_campaign",
@@ -119,6 +116,8 @@ class CrmTeam(models.Model):
         campaigns = super().create(vals_list)
         for campaign in campaigns.filtered("is_callcenter_campaign"):
             campaign._sync_callcenter_supervisor_assignments()
+        if campaigns:
+            self.env["ir.access"]._clear_caches()
         return campaigns
 
     def write(self, vals):
@@ -142,6 +141,7 @@ class CrmTeam(models.Model):
         ):
             for campaign in self:
                 campaign._sync_callcenter_supervisor_assignments()
+            self.env["ir.access"]._clear_caches()
         return result
 
     def _sync_callcenter_supervisor_assignments(self):

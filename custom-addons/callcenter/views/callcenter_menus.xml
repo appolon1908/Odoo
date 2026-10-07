@@ -8,10 +8,25 @@
         <field name="context">{'default_is_callcenter_campaign': True}</field>
     </record>
 
+    <record id="action_callcenter_leads" model="ir.actions.act_window">
+        <field name="name">Campaign Leads</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">kanban,list,form,graph,pivot</field>
+        <field name="domain">[('team_id.is_callcenter_campaign', '=', True)]</field>
+        <field name="context">{'default_type': 'lead'}</field>
+    </record>
+
     <menuitem id="menu_callcenter_root"
               name="Call Center"
-              parent="crm.crm_menu_root"
-              sequence="15"
+              web_icon="crm,static/description/icon.png"
+              sequence="25"
+              groups="callcenter.group_callcenter_agent,callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
+
+    <menuitem id="menu_callcenter_leads"
+              name="Campaign Leads"
+              parent="menu_callcenter_root"
+              action="action_callcenter_leads"
+              sequence="5"
               groups="callcenter.group_callcenter_agent,callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
 
     <menuitem id="menu_callcenter_campaigns"
@@ -21,10 +36,24 @@
               sequence="10"
               groups="callcenter.group_callcenter_agent,callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
 
+    <menuitem id="menu_callcenter_people"
+              name="Agents &amp; Supervisors"
+              parent="menu_callcenter_root"
+              action="action_callcenter_agent_directory"
+              sequence="15"
+              groups="callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
+
     <menuitem id="menu_callcenter_assignment_history"
               name="Assignment History"
               parent="menu_callcenter_root"
               action="action_callcenter_campaign_assignments"
               sequence="20"
               groups="callcenter.group_callcenter_agent,callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
+
+    <menuitem id="menu_callcenter_transfer_agent"
+              name="Transfer Agent"
+              parent="menu_callcenter_root"
+              action="action_callcenter_agent_transfer"
+              sequence="30"
+              groups="callcenter.group_callcenter_superuser"/>
 </odoo>
