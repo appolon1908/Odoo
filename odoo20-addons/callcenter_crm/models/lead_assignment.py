@@ -13,8 +13,13 @@ class CallCenterLeadAssignment(models.Model):
     assigned_at = fields.Datetime(required=True, default=fields.Datetime.now, index=True)
     released_at = fields.Datetime(index=True)
     assignment_source = fields.Selection(
-        [("queue", "Queue"), ("admin", "Admin"), ("manual_agent_creation", "Manual Agent Creation"),
-         ("transfer", "Transfer")],
+        [
+            ("queue", "Queue"),
+            ("admin", "Admin"),
+            ("supervisor", "Supervisor"),
+            ("manual_agent_creation", "Manual Agent Creation"),
+            ("transfer", "Transfer"),
+        ],
         required=True, default="admin", index=True,
     )
     assigned_by_id = fields.Many2one("res.users", required=True, readonly=True, ondelete="restrict")
