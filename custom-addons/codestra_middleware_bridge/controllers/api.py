@@ -644,6 +644,14 @@ class CodestraMiddlewareBridge(http.Controller):
         # The integration identity creates an unassigned lead; assigning it as
         # a human owner would incorrectly require an operator membership.
         values.update({"type": "lead", "user_id": False})
+        # Saved call-center leads are immutable after create(). Compute all
+        # compliance/eligibility fields before persistence so the API never
+        # requires a post-save lead mutation to finish intake.
+        values.update(
+            request.env["crm.lead"].sudo()._codestra_crm_compliance_snapshot_values(
+                payload, unit, values.get("campaign_id") or False
+            )
+        )
         # Payload fields and ownership were validated above.  Elevation is
         # limited to the ORM create so delegated campaign constraints can read
         # the already-bound governed workspace without requiring a human
@@ -827,6 +835,8 @@ class CodestraMiddlewareBridge(http.Controller):
                 error = self._prepare_update_values(lead, values)
                 if error:
                     return error
+                if lead.cc_contact_center_record:
+                    return self._json(403, {"error": "saved_lead_immutable"})
                 lead.write(values)
                 self._apply_crm_compliance(auth, lead, payload, unit)
             else:
@@ -896,6 +906,8 @@ class CodestraMiddlewareBridge(http.Controller):
             if error: return error
             error = self._prepare_update_values(lead, values)
             if error: return error
+            if lead.cc_contact_center_record:
+                return self._json(403, {"error": "saved_lead_immutable"})
             lead.write(values)
         return self._complete(auth, operation, self._crm_lead_value(lead, mapping))
 

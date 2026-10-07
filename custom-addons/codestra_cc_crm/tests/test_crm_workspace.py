@@ -133,6 +133,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "employee_id": employee.id,
                 "campaign_id": campaign.id,
                 "role": role,
+                "is_primary_supervisor": role == "supervisor",
                 "requested_by_id": cls.requester.id,
                 "source_ticket": ticket,
                 "starts_at": fields.Datetime.now(),
