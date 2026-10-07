@@ -209,8 +209,9 @@ class CrmLeadQueue(models.Model):
 
     def write(self, values):
         governed = self.filtered("cc_contact_center_record")
-        if governed and not _is_global_admin(self.env.user):
-            queue_capability = self.env.context.get("_cc_lead_queue_capability")
+        queue_capability = self.env.context.get("_cc_lead_queue_capability")
+        is_global_admin = _is_global_admin(self.env.user)
+        if governed and not is_global_admin:
             if queue_capability is QUEUE_SYSTEM_CAPABILITY:
                 forbidden = set(values) - QUEUE_CONTROLLED_FIELDS
                 if forbidden:
@@ -233,7 +234,43 @@ class CrmLeadQueue(models.Model):
                         "Super User or an authorized system process may change them."
                     )
                 )
-        return super().write(values)
+
+        assignment_before = {}
+        track_admin_assignment = (
+            bool(governed)
+            and is_global_admin
+            and "user_id" in values
+            and queue_capability is not QUEUE_SYSTEM_CAPABILITY
+        )
+        if track_admin_assignment:
+            assignment_before = {
+                lead.id: (lead.user_id.id, lead.campaign_id.id) for lead in governed
+            }
+
+        result = super().write(values)
+
+        if track_admin_assignment:
+            History = self.env["callcenter.lead.assignment"].sudo()
+            for lead in governed:
+                old_user_id, old_campaign_id = assignment_before[lead.id]
+                new_user_id = lead.user_id.id
+                if old_user_id == new_user_id and old_campaign_id == lead.campaign_id.id:
+                    continue
+                History._close_for_lead(
+                    lead, reason=_("Assignment changed by Call Center Super User.")
+                )
+                if new_user_id:
+                    History.create(
+                        {
+                            "lead_id": lead.id,
+                            "campaign_id": lead.campaign_id.id,
+                            "agent_id": new_user_id,
+                            "assignment_source": "transfer" if old_user_id else "admin",
+                            "assigned_by_id": self.env.user.id,
+                            "reason": _("Assignment changed by Call Center Super User."),
+                        }
+                    )
+        return result
 
     @api.constrains(
         "campaign_id",
