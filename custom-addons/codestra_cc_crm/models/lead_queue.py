@@ -170,6 +170,15 @@ class CrmLeadQueue(models.Model):
                 values["queue_state"] = "available"
                 values["user_id"] = False
                 values["cc_contact_center_record"] = True
+            governed_requested = bool(
+                values.get("cc_contact_center_record")
+                or values.get("campaign_id")
+                or values.get("cc_customer_profile_id")
+            )
+            if governed_requested and "queue_state" not in values:
+                values["queue_state"] = (
+                    "assigned" if values.get("user_id") else "available"
+                )
             prepared.append(values)
 
         records = super().create(prepared)
@@ -179,16 +188,23 @@ class CrmLeadQueue(models.Model):
             and lead.queue_state == "assigned"
         ):
             if operational_membership and record.user_id == self.env.user:
-                self.env["callcenter.lead.assignment"].sudo().create(
-                    {
-                        "lead_id": record.id,
-                        "campaign_id": record.campaign_id.id,
-                        "agent_id": record.user_id.id,
-                        "assignment_source": "manual_agent_creation",
-                        "assigned_by_id": self.env.user.id,
-                        "reason": _("Lead created by the assigned agent."),
-                    }
-                )
+                source = "manual_agent_creation"
+                reason = _("Lead created by the assigned agent.")
+            elif _is_global_admin(self.env.user):
+                source = "admin"
+                reason = _("Lead created with an administrator assignment.")
+            else:
+                continue
+            self.env["callcenter.lead.assignment"].sudo().create(
+                {
+                    "lead_id": record.id,
+                    "campaign_id": record.campaign_id.id,
+                    "agent_id": record.user_id.id,
+                    "assignment_source": source,
+                    "assigned_by_id": self.env.user.id,
+                    "reason": reason,
+                }
+            )
         return records
 
     def write(self, values):
