@@ -52,6 +52,8 @@ class CallCenterLeadAssignment(models.Model):
 
     def _release(self, released_at=None):
         when = released_at or fields.Datetime.now()
-        for row in self.filtered(lambda r: not r.released_at):
-            super(CallCenterLeadAssignment, row.sudo()).write({"released_at": when})
+        rows = self.filtered(lambda r: not r.released_at)
+        if rows:
+            rows.sudo().write({"released_at": when})
+            rows.flush_recordset(["released_at"])
         return True

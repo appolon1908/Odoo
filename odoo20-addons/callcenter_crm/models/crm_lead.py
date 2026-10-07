@@ -368,6 +368,12 @@ class CrmLead(models.Model):
             open_rows = History.search([("lead_id", "=", lead.id), ("released_at", "=", False)])
             if open_rows:
                 open_rows._release()
+                History.flush_model(["released_at"])
+                if History.search_count([
+                    ("lead_id", "=", lead.id),
+                    ("released_at", "=", False),
+                ]):
+                    raise ValidationError(_("Previous lead assignment history could not be closed."))
             if lead.cc_campaign_id and lead.user_id:
                 lead._cc_open_assignment_history(source, reason, actor_id=actor_id)
 
