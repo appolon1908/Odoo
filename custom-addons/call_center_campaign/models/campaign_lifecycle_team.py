@@ -639,6 +639,9 @@ class CrmTeamCallCenterCampaign(models.Model):
             "res_model": "crm.team",
             "res_id": duplicate.id,
             "view_mode": "form",
+            "view_id": self.env.ref(
+                "call_center_campaign.view_callcenter_crm_team_campaign_form"
+            ).id,
             "target": "current",
         }
 
