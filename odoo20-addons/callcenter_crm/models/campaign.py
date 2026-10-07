@@ -270,7 +270,7 @@ class CallCenterCampaign(models.Model):
         for campaign in self:
             if to_state not in allowed[campaign.state]:
                 raise ValidationError(
-                    _("Invalid campaign transition: %(from)s → %(to)s", from=campaign.state, to=to_state)
+                    _("Invalid campaign transition: %(from_state)s → %(to_state)s", from_state=campaign.state, to_state=to_state)
                 )
             if to_state in {"ready", "active"}:
                 campaign._validate_ready()
