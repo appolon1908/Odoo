@@ -2,6 +2,12 @@ from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, ValidationError
 
 
+CALLCENTER_CAMPAIGN_CONFIG_FIELDS = {
+    "name", "code", "company_id", "campaign_type", "start_at", "end_at",
+    "primary_supervisor_id", "backup_supervisor_ids", "client_id", "description",
+}
+
+
 class CallCenterCampaign(models.Model):
     _name = "callcenter.campaign"
     _inherit = ["mail.thread", "mail.activity.mixin"]
@@ -57,14 +63,13 @@ class CallCenterCampaign(models.Model):
     def _can_manage(self):
         return (
             self.env.is_superuser()
-            or self.env.user.has_group("base.group_system")
             or self.env.user.has_group("callcenter_crm.group_callcenter_superuser")
         )
 
     @api.model_create_multi
     def create(self, vals_list):
         if not self._can_manage():
-            raise AccessError(_("Only the Call Center Super User or technical administrator may create campaigns."))
+            raise AccessError(_("Only the Call Center Super User may create campaigns."))
         records = self.browse()
         for incoming in vals_list:
             vals = dict(incoming)
@@ -93,9 +98,15 @@ class CallCenterCampaign(models.Model):
 
     def write(self, vals):
         if not self._can_manage():
-            raise AccessError(_("Only the Call Center Super User or technical administrator may modify campaigns."))
+            raise AccessError(_("Only the Call Center Super User may modify campaigns."))
         if ("state" in vals or "active" in vals) and not self.env.is_superuser():
             raise AccessError(_("Use the campaign lifecycle actions instead of writing state or archive flags directly."))
+        if (
+            not self.env.is_superuser()
+            and CALLCENTER_CAMPAIGN_CONFIG_FIELDS.intersection(vals)
+            and any(campaign.state == "closed" for campaign in self)
+        ):
+            raise AccessError(_("Closed campaign configuration is immutable; duplicate the campaign for a new run."))
         vals = dict(vals)
         if "code" in vals:
             vals["code"] = (vals["code"] or "").strip().upper()

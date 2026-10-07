@@ -47,7 +47,6 @@ class CallCenterCampaignAssignment(models.Model):
     def _can_manage(self):
         return (
             self.env.is_superuser()
-            or self.env.user.has_group("base.group_system")
             or self.env.user.has_group("callcenter_crm.group_callcenter_superuser")
         )
 
@@ -94,7 +93,7 @@ class CallCenterCampaignAssignment(models.Model):
         return result
 
     def unlink(self):
-        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+        if not self.env.is_superuser():
             raise AccessError(_("Campaign assignment history cannot be deleted."))
         return super().unlink()
 

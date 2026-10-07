@@ -20,18 +20,16 @@ class CallCenterCampaignStateLog(models.Model):
     )
     changed_by_id = fields.Many2one("res.users", required=True, readonly=True, ondelete="restrict")
     changed_at = fields.Datetime(required=True, readonly=True, default=fields.Datetime.now, index=True)
-    reason = fields.Char()
+    reason = fields.Text()
 
     @api.model_create_multi
     def create(self, vals_list):
-        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+        if not self.env.is_superuser():
             raise AccessError(_("Campaign state audit rows are system-managed."))
         return super().create(vals_list)
 
     def write(self, vals):
-        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
-            raise AccessError(_("Campaign state audit rows are immutable."))
-        return super().write(vals)
+        raise AccessError(_("Campaign state audit rows are immutable."))
 
     def unlink(self):
         if not self.env.is_superuser():

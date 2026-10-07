@@ -36,4 +36,29 @@
         <field name="implied_ids" eval="[Command.link(ref('group_callcenter_supervisor'))]"/>
         <field name="comment">Operational authority across all call-center campaigns without technical administrator rights.</field>
     </record>
+
+    <!-- Stable external role IDs required by the Call Center contract.
+         They alias the canonical callcenter_crm groups instead of creating
+         a second role hierarchy. -->
+    <record id="alias_callcenter_group_callcenter_agent" model="ir.model.data">
+        <field name="module">callcenter</field>
+        <field name="name">group_callcenter_agent</field>
+        <field name="model">res.groups</field>
+        <field name="res_id" ref="group_callcenter_agent"/>
+        <field name="noupdate" eval="True"/>
+    </record>
+    <record id="alias_callcenter_group_callcenter_supervisor" model="ir.model.data">
+        <field name="module">callcenter</field>
+        <field name="name">group_callcenter_supervisor</field>
+        <field name="model">res.groups</field>
+        <field name="res_id" ref="group_callcenter_supervisor"/>
+        <field name="noupdate" eval="True"/>
+    </record>
+    <record id="alias_callcenter_group_callcenter_superuser" model="ir.model.data">
+        <field name="module">callcenter</field>
+        <field name="name">group_callcenter_superuser</field>
+        <field name="model">res.groups</field>
+        <field name="res_id" ref="group_callcenter_superuser"/>
+        <field name="noupdate" eval="True"/>
+    </record>
 </odoo>
