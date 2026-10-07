@@ -297,7 +297,7 @@ class CcCustomerProfile(models.Model):
                     ("user_id", "=", profile.assigned_user_id.id),
                     ("campaign_id", "=", profile.campaign_id.id),
                     ("state", "=", "active"),
-                    ("role", "in", ("agent", "senior_agent", "supervisor")),
+                    ("role", "in", ("agent", "senior_agent")),
                 ],
                 limit=1,
             )
@@ -456,17 +456,45 @@ class CrmLead(models.Model):
         ):
             raise AccessError(_("Agents cannot change the CRM team."))
 
+        transfer_campaign = self.env["cc.campaign"]
+        if (
+            governed
+            and values.get("campaign_id")
+            and self.env.context.get("_cc_crm_scope_capability")
+            is CRM_SCOPE_MIGRATION_CAPABILITY
+        ):
+            transfer_campaign = (
+                self.env["cc.campaign"]
+                .with_context(active_test=False)
+                .browse(values["campaign_id"])
+                .exists()
+            )
+            if not transfer_campaign:
+                raise ValidationError(_("The target campaign does not exist."))
+
         if governed and "user_id" in values and values.get("user_id"):
             target_user = self.env["res.users"].browse(values["user_id"]).exists()
             if not target_user:
                 raise ValidationError(_("The assigned agent does not exist."))
             for lead in governed:
-                _validate_agent_assignment(self.env, lead.campaign_id, target_user)
+                assignment_campaign = transfer_campaign or lead.campaign_id
+                _validate_agent_assignment(self.env, assignment_campaign, target_user)
 
         if governed and _is_supervisor(self.env.user) and "user_id" in values:
             supervised_ids = set(self.env.user.cc_supervised_campaign_ids.ids)
             if any(lead.campaign_id.id not in supervised_ids for lead in governed):
                 raise AccessError(_("Supervisors may reassign only their supervised campaigns."))
+
+        if governed and _is_supervisor(self.env.user) and "team_id" in values:
+            for lead in governed:
+                target_team = self.env["crm.team"].browse(values["team_id"]).exists()
+                if (
+                    target_team
+                    and target_team not in lead.campaign_id.legacy_campaign_id.team_ids
+                ):
+                    raise AccessError(
+                        _("Supervisors cannot move leads to another campaign team.")
+                    )
 
         if _is_operational(self.env.user) and {
             "codestra_workflow_id",
