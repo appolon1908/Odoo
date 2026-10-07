@@ -237,13 +237,15 @@ class TestCampaignCrmWorkspace(TransactionCase):
                     "cc_customer_profile_id": self.profile_b.id,
                 }
             )
-        with self.assertRaises(ValidationError):
-            self.Lead.with_user(self.agent_a).create(
-                {
-                    "name": "Missing source list",
-                    "cc_customer_profile_id": self.profile_a.id,
-                }
-            )
+        manual = self.Lead.with_user(self.agent_a).create(
+            {
+                "name": "Manual source defaults",
+                "cc_customer_profile_id": self.profile_a.id,
+            }
+        )
+        self.assertEqual(
+            manual.cc_source_list_key, f"manual:odoo:user:{self.agent_a.id}"
+        )
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
 
