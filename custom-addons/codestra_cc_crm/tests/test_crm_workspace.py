@@ -48,8 +48,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-agent-b@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.supervisor_a = cls._create_user(
+            "CRM Supervisor A",
+            "cc-crm-supervisor-a@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_supervisor"],
+        )
         cls._activate_membership(cls.agent_a, cls.campaign_a, "CRM-MEMBER-A")
         cls._activate_membership(cls.agent_b, cls.campaign_b, "CRM-MEMBER-B")
+        cls._activate_membership(
+            cls.supervisor_a, cls.campaign_a, "CRM-SUPERVISOR-A", role="supervisor"
+        )
         cls.partner_a = cls.env["res.partner"].create(
             {
                 "name": "Synthetic CRM Customer A",
@@ -103,7 +111,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
 
     @classmethod
-    def _activate_membership(cls, user, campaign, ticket):
+    def _activate_membership(cls, user, campaign, ticket, role="agent"):
         employee = cls.env["hr.employee"].create(
             {"name": user.name, "user_id": user.id, "company_id": cls.env.company.id}
         )
@@ -114,7 +122,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "user_id": user.id,
                 "employee_id": employee.id,
                 "campaign_id": campaign.id,
-                "role": "agent",
+                "role": role,
                 "requested_by_id": cls.requester.id,
                 "source_ticket": ticket,
                 "starts_at": fields.Datetime.now(),
@@ -227,6 +235,65 @@ class TestCampaignCrmWorkspace(TransactionCase):
             )
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
+
+    def test_agent_creation_defaults_and_saved_lead_lock(self):
+        created = self.Lead.with_user(self.agent_a).create(
+            {"name": "Agent-created locked lead"}
+        )
+        self.assertEqual(created.user_id, self.agent_a)
+        self.assertEqual(created.campaign_id, self.campaign_a)
+        self.assertEqual(
+            created.call_center_campaign_id, self.campaign_a.legacy_campaign_id
+        )
+        self.assertEqual(created.create_uid, self.agent_a)
+        self.assertTrue(created.create_date)
+        self.assertEqual(
+            created.cc_source_list_key, f"manual:odoo:user:{self.agent_a.id}"
+        )
+        self.assertTrue(created.cc_contact_center_record)
+
+        with self.assertRaises(AccessError):
+            self.Lead.with_user(self.agent_a).create(
+                {
+                    "name": "Cross-campaign spoof",
+                    "campaign_id": self.campaign_b.id,
+                }
+            )
+        with self.assertRaises(AccessError):
+            self.Lead.with_user(self.agent_a).create(
+                {
+                    "name": "Cross-agent spoof",
+                    "user_id": self.agent_b.id,
+                }
+            )
+
+        supervisor_created = self.Lead.with_user(self.supervisor_a).create(
+            {
+                "name": "Supervisor-created lead",
+                "user_id": self.agent_a.id,
+            }
+        )
+        self.assertEqual(supervisor_created.campaign_id, self.campaign_a)
+        self.assertEqual(supervisor_created.user_id, self.agent_a)
+
+        for actor in (self.agent_a, self.supervisor_a, self.service):
+            with self.subTest(actor=actor.login):
+                with self.assertRaises(AccessError):
+                    created.with_user(actor).write(
+                        {"name": f"Forbidden edit by {actor.login}"}
+                    )
+
+        with self.assertRaises(AccessError):
+            created.with_user(self.agent_a).write({"active": False})
+
+        created.with_user(self.requester).write(
+            {
+                "name": "Super User corrected lead",
+                "active": False,
+            }
+        )
+        self.assertEqual(created.name, "Super User corrected lead")
+        self.assertFalse(created.active)
 
     def test_crm_search_name_group_and_direct_id_do_not_leak(self):
         LeadA = self.Lead.with_user(self.agent_a)
