@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_callcenter_crm" model="ir.module.category">
+        <field name="name">Call Center CRM</field>
+        <field name="description">Operational call-center CRM permissions.</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <record id="res_groups_privilege_callcenter_crm" model="res.groups.privilege">
+        <field name="name">Call Center CRM</field>
+        <field name="description">Campaign-scoped call-center CRM access.</field>
+        <field name="category_id" ref="module_category_callcenter_crm"/>
+        <field name="sequence">30</field>
+    </record>
+
+    <record id="group_callcenter_agent" model="res.groups">
+        <field name="name">Agent</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_callcenter_crm"/>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+        <field name="comment">Create leads in the active campaign and read only assigned call-center leads.</field>
+    </record>
+
+    <record id="group_callcenter_supervisor" model="res.groups">
+        <field name="name">Supervisor</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="res_groups_privilege_callcenter_crm"/>
+        <field name="implied_ids" eval="[Command.link(ref('group_callcenter_agent'))]"/>
+        <field name="comment">Read supervised campaigns, agents and leads. Saved call-center leads remain locked.</field>
+    </record>
+
+    <record id="group_callcenter_superuser" model="res.groups">
+        <field name="name">Call Center Super User</field>
+        <field name="sequence">30</field>
+        <field name="privilege_id" ref="res_groups_privilege_callcenter_crm"/>
+        <field name="implied_ids" eval="[Command.link(ref('group_callcenter_supervisor'))]"/>
+        <field name="comment">Operational authority across all call-center campaigns without technical administrator rights.</field>
+    </record>
+</odoo>

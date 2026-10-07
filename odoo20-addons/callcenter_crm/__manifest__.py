@@ -1,0 +1,22 @@
+{
+    "name": "Call Center CRM Core",
+    "version": "20.0.1.0.0",
+    "category": "Sales/CRM",
+    "summary": "Secure campaign CRM, imports, queues, and audit history for call centers",
+    "author": "Codestra",
+    "license": "LGPL-3",
+    "depends": ["base", "mail", "sales_team", "crm"],
+    "data": [
+        "security/groups.xml",
+        "security/ir.access.csv",
+        "data/cron.xml",
+        "views/campaign_views.xml",
+        "views/crm_lead_views.xml",
+        "views/import_views.xml",
+        "views/menus.xml",
+        "wizards/lead_import_wizard_views.xml",
+        "wizards/role_assignment_wizard_views.xml",
+    ],
+    "installable": True,
+    "application": True,
+}
