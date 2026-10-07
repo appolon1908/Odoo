@@ -277,6 +277,25 @@ class TestMiddlewareCrmIntakeHttp(HttpCase):
         self.assertEqual(response.status_code, 409, response.text)
         self.assertEqual(response.json()["error"], "campaign_binding_immutable")
 
+    def test_saved_campaign_lead_cannot_be_updated_through_upsert_api(self):
+        first = self.command(campaign_code=self.campaign_code)
+        self.assertEqual(self.post(first).status_code, 201)
+        original = self.lead_for(first)
+        original_name = original.name
+
+        update = self.command(
+            source_record_id=first["payload"]["source_record_id"],
+            campaign_code=self.campaign_code,
+        )
+        update["payload"]["lead"]["name"] = "Forbidden Middleware Rewrite"
+        response = self.post(update)
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()["error"], "saved_lead_immutable")
+
+        self.env.invalidate_all()
+        original = self.lead_for(first)
+        self.assertEqual(original.name, original_name)
+
     def test_unknown_consent_cannot_authorize_external_contact(self):
         command = self.command(consent_status="unknown", allow_contact=True)
         response = self.post(command)

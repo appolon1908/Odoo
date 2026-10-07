@@ -47,6 +47,10 @@ def _is_global_admin(user):
     return user.has_group("codestra_cc_security.group_cc_global_administrator")
 
 
+def _is_call_center_super_user(user):
+    return user.has_group("codestra_cc_security.group_cc_call_center_superuser")
+
+
 def _is_supervisor(user):
     return user.has_group("codestra_cc_security.group_cc_campaign_supervisor")
 
@@ -344,6 +348,14 @@ class CrmLead(models.Model):
     @api.model_create_multi
     def create(self, values_list):
         prepared = []
+        operational_creation = _is_operational(self.env.user) and not _is_global_admin(
+            self.env.user
+        )
+        membership = (
+            self.env.user._cc_resolve_operational_membership()
+            if operational_creation
+            else self.env["cc.campaign.membership"]
+        )
         for original in values_list:
             values = dict(original)
             profile = self.env["cc.customer.profile"]
@@ -354,6 +366,30 @@ class CrmLead(models.Model):
                 if not profile:
                     raise ValidationError(_("The campaign customer profile does not exist."))
                 profile.check_access("read")
+
+            if operational_creation:
+                active_campaign = membership.campaign_id
+                supplied_campaign_id = values.get("campaign_id")
+                if supplied_campaign_id and supplied_campaign_id != active_campaign.id:
+                    raise AccessError(
+                        _("The active campaign is assigned automatically during lead creation.")
+                    )
+                if membership.role in {"agent", "senior_agent"}:
+                    supplied_user_id = values.get("user_id")
+                    if supplied_user_id and supplied_user_id != self.env.user.id:
+                        raise AccessError(
+                            _("Agents cannot create leads assigned to another user.")
+                        )
+                    values["user_id"] = self.env.user.id
+                elif not values.get("user_id"):
+                    values["user_id"] = self.env.user.id
+                values["campaign_id"] = active_campaign.id
+                values["cc_contact_center_record"] = True
+                if not str(values.get("cc_source_list_key") or "").strip():
+                    values["cc_source_list_key"] = (
+                        f"manual:odoo:user:{self.env.user.id}"
+                    )
+
             governed = bool(
                 values.get("cc_contact_center_record")
                 or values.get("campaign_id")
@@ -380,7 +416,38 @@ class CrmLead(models.Model):
         return super().create(prepared)
 
     def write(self, values):
-        if {
+        saved_call_center_leads = self.filtered("cc_contact_center_record")
+        is_call_center_super_user = _is_call_center_super_user(self.env.user)
+        if saved_call_center_leads and not is_call_center_super_user:
+            raise AccessError(
+                _(
+                    "Saved leads can only be modified by a Call Center Super User. "
+                    "Record call attempts, activities, and dispositions in their "
+                    "separate history models."
+                )
+            )
+
+        values = dict(values)
+        if (
+            is_call_center_super_user
+            and saved_call_center_leads
+            and "campaign_id" in values
+        ):
+            campaign = self.env["cc.campaign"].browse(values["campaign_id"]).exists()
+            if not campaign:
+                raise ValidationError(
+                    _("Saved call-center leads must remain assigned to a valid campaign.")
+                )
+            values.update(
+                {
+                    "call_center_campaign_id": campaign.legacy_campaign_id.id,
+                    "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
+                    "is_codestra_call_center_lead": True,
+                    "cc_contact_center_record": True,
+                }
+            )
+
+        if not is_call_center_super_user and {
             "campaign_id",
             "cc_customer_profile_id",
             "cc_source_list_key",
@@ -389,28 +456,42 @@ class CrmLead(models.Model):
                 "_cc_crm_scope_capability"
             ) is not CRM_SCOPE_MIGRATION_CAPABILITY:
                 raise AccessError(_("CRM campaign ownership is immutable."))
-        if _is_operational(self.env.user) and not _is_supervisor(self.env.user) and {
-            "user_id",
-            "assigned_agent_profile_id",
-            "call_center_supervisor_id",
-            "codestra_supervisor_id",
-        }.intersection(values):
+        if (
+            not is_call_center_super_user
+            and _is_operational(self.env.user)
+            and not _is_supervisor(self.env.user)
+            and {
+                "user_id",
+                "assigned_agent_profile_id",
+                "call_center_supervisor_id",
+                "codestra_supervisor_id",
+            }.intersection(values)
+        ):
             raise AccessError(_("Agents cannot reassign campaign CRM ownership."))
-        if _is_operational(self.env.user) and {
-            "codestra_workflow_id",
-            "codestra_current_status_id",
-            "codestra_previous_status_id",
-            "status_entered_at",
-        }.intersection(values) and self.env.context.get(
-            "_cc_crm_transition_capability"
-        ) is not CRM_TRANSITION_CAPABILITY:
+        if (
+            not is_call_center_super_user
+            and _is_operational(self.env.user)
+            and {
+                "codestra_workflow_id",
+                "codestra_current_status_id",
+                "codestra_previous_status_id",
+                "status_entered_at",
+            }.intersection(values)
+            and self.env.context.get(
+                "_cc_crm_transition_capability"
+            ) is not CRM_TRANSITION_CAPABILITY
+        ):
             raise AccessError(_("Campaign CRM status requires the governed transition."))
-        if _is_operational(self.env.user) and {
-            "partner_id",
-            "business_unit_id",
-            "call_center_campaign_id",
-            "is_codestra_call_center_lead",
-        }.intersection(values):
+        if (
+            not is_call_center_super_user
+            and _is_operational(self.env.user)
+            and {
+                "partner_id",
+                "business_unit_id",
+                "call_center_campaign_id",
+                "is_codestra_call_center_lead",
+            }.intersection(values)
+        ):
             raise AccessError(_("Operational users cannot bypass the customer profile."))
         return super().write(values)
 
