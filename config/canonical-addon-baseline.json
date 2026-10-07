@@ -291,6 +291,19 @@
     }
   },
   "additional_strict_overrides": {
+    "codestra_cc_crm": {
+      "base_tree": "196b1631510c711f1118cb8812288c6e6e6b30ac",
+      "current_tree": "1855b2a931df6ee0b4eef11fac0bc446864200cc",
+      "integration_boundary_exceptions": [
+        {
+          "kind": "odoo_cursor_locking",
+          "path": "models/lead_queue.py",
+          "reason": "All cursor SQL stays on Odoo's active transaction cursor: parameterized duplicate lookups plus SELECT FOR UPDATE and SKIP LOCKED claims serialize import confirmation and lead allocation without external database connections."
+        }
+      ],
+      "pull_request": 157,
+      "reason": "PR #157 extends the canonical Codestra CRM with Super-User-governed CSV/XLSX lead import, post-save source-record locking, duplicate protection, append-only assignment history, and concurrency-safe Get Next Lead allocation. Raw SQL is limited to parameterized SELECT statements on Odoo's existing cursor for duplicate reads and row locking; all business mutations continue through the Odoo ORM."
+    },
     "codestra_kyqra_review_hub": {
       "base_tree": "93ed2c44e0208abc733d1ef5f189973857e9c2d1",
       "current_tree": "2c040d1eb03126520e2ace4c9d3605e827214d2e",
