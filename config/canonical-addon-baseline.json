@@ -234,9 +234,9 @@
     },
     "codestra_lead_ingestion": {
       "base_tree": "071935b8becbaa636b656d05a040d4650b15ae24",
-      "current_tree": "8a3aceebe0ab64fa155139621ae6410a8b7f2bb7",
-      "pull_request": 67,
-      "reason": "Make the synthetic legacy lead-ingestion fixture explicitly unmanaged before its active-state setup; automatic design approval and live activation guards remain unchanged. Advance the addon patch version and subject this changed subtree to the full strict review. Preserve the existing authentication-reference field masking through an Odoo inherited-view attribute operation, avoiding a false hardcoded-password match without suppressing any scanner rule."
+      "current_tree": "61457a9308dfdab14f3df1d157b8298cf4d982cc",
+      "pull_request": 157,
+      "reason": "PR #157 preserves the existing compliance, outbox, reconciliation, immutable-audit, and fail-closed delivery boundaries while removing the legacy manual-import bypass: only the canonical Call Center Super User may create a batch, change upload source data, upload a file, apply a duplicate-file override, or materialize CRM leads. The approved-batch import cron is deliberately inert so scheduled execution cannot bypass manual confirmation; reviewer and middleware roles retain only their non-import duties."
     },
     "codestra_moneybee_crm": {
       "base_tree": "31cebcead3176785e4d7e9f1f38be95c802ef03e",
@@ -293,7 +293,7 @@
   "additional_strict_overrides": {
     "codestra_cc_crm": {
       "base_tree": "196b1631510c711f1118cb8812288c6e6e6b30ac",
-      "current_tree": "1e0ca55b0d96b8a76248f2224f85cd6595bf935c",
+      "current_tree": "c28720c5e631d0b4f472a5acdf35db8a788cb616",
       "integration_boundary_exceptions": [
         {
           "kind": "odoo_cursor_locking",
