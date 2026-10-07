@@ -260,7 +260,11 @@ class CrmLead(models.Model):
                         raise ValidationError(_("Assigned agents must have an active assignment to the lead campaign."))
                 break
 
-        result = super().write(vals)
+        result = (
+            super(CrmLead, self.sudo()).write(vals)
+            if callcenter_records
+            else super().write(vals)
+        )
         if callcenter_records and ("user_id" in vals or "cc_campaign_id" in vals):
             for lead in self:
                 if old_users.get(lead.id) != lead.user_id.id or old_campaigns.get(lead.id) != lead.cc_campaign_id.id:

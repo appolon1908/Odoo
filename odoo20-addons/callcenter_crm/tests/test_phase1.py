@@ -166,7 +166,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
             ("lead_id", "in", [lead1.id, lead2.id]), ("released_at", "=", False)
         ])
         self.assertEqual(len(history), 2)
-        self.assertEqual(set(history.assignment_source), {"queue"})
+        self.assertEqual(set(history.mapped("assignment_source")), {"queue"})
 
     def test_10_agent_transfer_preserves_campaign_and_native_membership_history(self):
         old = self.env["callcenter.campaign.assignment"].sudo().search([
