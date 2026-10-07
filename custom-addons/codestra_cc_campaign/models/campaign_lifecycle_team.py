@@ -424,7 +424,7 @@ class CrmTeamCallCenterCampaign(models.Model):
                 )
             for assignment in assignments:
                 _require_agent_user(assignment.user_id)
-                conflict = self.env["callcenter.campaign.assignment"].sudo().search(
+                conflict = self.env["callcenter.campaign.assignment"].search(
                     [
                         ("user_id", "=", assignment.user_id.id),
                         ("active", "=", True),
@@ -467,7 +467,7 @@ class CrmTeamCallCenterCampaign(models.Model):
                         domain.append(("role", "=", "supervisor"))
                     else:
                         domain.append(("role", "in", ("agent", "senior_agent")))
-                    if not self.env["cc.campaign.membership"].sudo().search(
+                    if not self.env["cc.campaign.membership"].search(
                         domain, limit=1
                     ):
                         raise ValidationError(
@@ -480,7 +480,7 @@ class CrmTeamCallCenterCampaign(models.Model):
 
     def _log_campaign_transition(self, from_state, to_state, reason):
         self.ensure_one()
-        self.env["callcenter.campaign.state.log"].sudo().with_context(
+        self.env["callcenter.campaign.state.log"].with_context(
             _callcenter_state_log_capability=CALLCENTER_STATE_LOG_CAPABILITY
         ).create(
             {
@@ -535,7 +535,7 @@ class CrmTeamCallCenterCampaign(models.Model):
                     _callcenter_assignment_capability=CALLCENTER_ASSIGNMENT_CAPABILITY
                 ).write({"active": False, "date_to": now})
             if team.cc_campaign_id:
-                memberships = self.env["cc.campaign.membership"].sudo().search(
+                memberships = self.env["cc.campaign.membership"].search(
                     [
                         ("campaign_id", "=", team.cc_campaign_id.id),
                         ("state", "=", "active"),
@@ -792,7 +792,7 @@ class CallCenterCampaignAssignment(models.Model):
                 )
 
     def _sync_native_membership(self):
-        Native = self.env["crm.team.member"].sudo().with_context(active_test=False)
+        Native = self.env["crm.team.member"].with_context(active_test=False)
         for assignment in self:
             native = Native.search(
                 [
@@ -950,7 +950,7 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
             ):
                 assignments = self.env[
                     "callcenter.campaign.assignment"
-                ].sudo().search(
+                ].search(
                     [
                         ("user_id", "=", self.env.user.id),
                         ("active", "=", True),
@@ -985,7 +985,7 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                 if operational and not is_supervisor:
                     if values.get("user_id") and values["user_id"] != self.env.user.id:
                         raise AccessError(_("Agents may create leads only for themselves."))
-                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
+                    assignment = self.env["callcenter.campaign.assignment"].search(
                         [
                             ("campaign_id", "=", team.id),
                             ("user_id", "=", self.env.user.id),
@@ -997,7 +997,7 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                         raise AccessError(_("An active campaign assignment is required."))
                     values["user_id"] = self.env.user.id
                 elif values.get("user_id"):
-                    assignment = self.env["callcenter.campaign.assignment"].sudo().search(
+                    assignment = self.env["callcenter.campaign.assignment"].search(
                         [
                             ("campaign_id", "=", team.id),
                             ("user_id", "=", values["user_id"]),
@@ -1040,7 +1040,7 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     for lead in governed:
                         assignment = self.env[
                             "callcenter.campaign.assignment"
-                        ].sudo().search(
+                        ].search(
                             [
                                 ("campaign_id", "=", lead.team_id.id),
                                 ("user_id", "=", values["user_id"]),
@@ -1085,7 +1085,7 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     if effective_user_id:
                         assignment = self.env[
                             "callcenter.campaign.assignment"
-                        ].sudo().search(
+                        ].search(
                             [
                                 ("campaign_id", "=", target.id),
                                 ("user_id", "=", effective_user_id),
