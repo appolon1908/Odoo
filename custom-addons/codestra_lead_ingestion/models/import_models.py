@@ -58,6 +58,29 @@ DENIAL_CODES = [
     ("manual_denial", "Manual Denial"),
 ]
 
+IMPORT_SOURCE_FIELDS = {
+    "campaign_id",
+    "business_unit_id",
+    "source_id",
+    "upload_method",
+    "original_filename",
+    "file_data",
+    "file_mimetype",
+    "mapping_id",
+    "duplicate_override_reason",
+}
+
+
+def _is_callcenter_superuser(user):
+    return user.has_group("codestra_cc_security.group_cc_global_administrator")
+
+
+def _require_callcenter_superuser(env):
+    if not _is_callcenter_superuser(env.user):
+        raise AccessError(
+            _("Only the Call Center Super User may create, upload, or import lead lists.")
+        )
+
 
 class LeadImportBatch(models.Model):
     _name = "codestra.lead.import.batch"
@@ -154,7 +177,18 @@ class LeadImportBatch(models.Model):
             if record.file_size < 0 or not 0 <= record.progress_percent <= 100:
                 raise ValidationError(_("Invalid file size or progress."))
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        _require_callcenter_superuser(self.env)
+        return super().create(vals_list)
+
     def write(self, vals):
+        if IMPORT_SOURCE_FIELDS.intersection(vals) and not _is_callcenter_superuser(
+            self.env.user
+        ):
+            raise AccessError(
+                _("Only the Call Center Super User may change lead import source data.")
+            )
         if "state" in vals and not self.env.context.get("codestra_transition"):
             raise AccessError(_("Batch state is changed only by controlled actions."))
         return super().write(vals)
@@ -191,8 +225,7 @@ class LeadImportBatch(models.Model):
 
     def action_upload(self):
         self.ensure_one()
-        if not self.env.user.has_group("codestra_lead_ingestion.group_lead_importer"):
-            raise AccessError(_("Lead Importer access is required."))
+        _require_callcenter_superuser(self.env)
         if self.state != "draft":
             raise UserError(_("Only draft batches can be uploaded."))
         raw = base64.b64decode(self.file_data or b"")
@@ -213,7 +246,11 @@ class LeadImportBatch(models.Model):
         digest = hashlib.sha256(raw).hexdigest()
         duplicate = self.search([("id", "!=", self.id), ("company_id", "=", self.company_id.id), ("file_sha256", "=", digest), ("state", "!=", "cancelled")], limit=1)
         override = self.env["ir.config_parameter"].sudo().get_param("codestra_lead_ingestion.duplicate_override_enabled") == "True"
-        if duplicate and not (override and self.env.user.has_group("codestra_lead_ingestion.group_lead_import_admin") and self.duplicate_override_reason):
+        if duplicate and not (
+            override
+            and _is_callcenter_superuser(self.env.user)
+            and self.duplicate_override_reason
+        ):
             raise ValidationError(_("This file was already processed in batch %s.") % duplicate.display_name)
         rows = self._parse_file(raw, extension)
         max_rows = int(self.env["ir.config_parameter"].sudo().get_param("codestra_lead_ingestion.max_rows", 100000))
@@ -278,8 +315,7 @@ class LeadImportBatch(models.Model):
         return self._transition(("awaiting_approval",), "rejected", group="codestra_lead_ingestion.group_compliance_manager", reason=self.rejection_reason)
 
     def action_import(self):
-        if not self.env.user.has_group("codestra_lead_ingestion.group_lead_import_admin"):
-            raise AccessError(_("Lead Import Administrator access is required."))
+        _require_callcenter_superuser(self.env)
         self._transition(("approved",), "importing")
         chunk = int(self.env["ir.config_parameter"].sudo().get_param("codestra_lead_ingestion.chunk_size", 2000))
         eligible = self.line_ids.filtered(lambda l: l.status == "approved")
@@ -341,9 +377,9 @@ class LeadImportBatch(models.Model):
 
     @api.model
     def _cron_import_chunks(self):
-        for batch in self.search([("state", "=", "approved")], limit=5):
-            with self.env.cr.savepoint():
-                batch.action_import()
+        # Manual confirmation by the Call Center Super User is authoritative.
+        # A scheduler must never turn an approved batch into CRM records.
+        return 0
 
     @api.model
     def _cron_reconcile(self):
