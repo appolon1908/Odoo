@@ -130,7 +130,6 @@
     <field name="name">Lead Assignment History</field>
     <field name="res_model">callcenter.lead.assignment</field>
     <field name="view_mode">list</field>
-    <field name="create" eval="False"/>
   </record>
 
   <menuitem
