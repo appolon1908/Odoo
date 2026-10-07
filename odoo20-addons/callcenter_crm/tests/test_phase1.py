@@ -70,12 +70,19 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertTrue(self.ops.has_group("callcenter_crm.group_callcenter_superuser"))
         self.assertFalse(self.ops.has_group("base.group_system"))
         self.assertFalse(self.ops.has_group("sales_team.group_sale_manager"))
+        self.assertEqual(self.env.ref("callcenter.group_callcenter_agent"), self.group_agent)
+        self.assertEqual(self.env.ref("callcenter.group_callcenter_supervisor"), self.group_supervisor)
+        self.assertEqual(self.env.ref("callcenter.group_callcenter_superuser"), self.group_superuser)
 
     def test_02_campaign_is_authoritative_and_native_assignment_is_off(self):
         self.assertEqual(self.campaign_a.code, "CAMP-A")
         self.assertEqual(self.campaign_a.crm_team_id.cc_campaign_id, self.campaign_a)
         self.assertTrue(self.campaign_a.crm_team_id.assignment_optout)
         self.assertEqual(self.campaign_a.crm_team_id.user_id, self.sup_a)
+        self.assertTrue(self.campaign_a.crm_team_id.is_callcenter_campaign)
+        self.assertEqual(self.campaign_a.crm_team_id.campaign_code, "CAMP-A")
+        self.assertEqual(self.campaign_a.crm_team_id.campaign_type, "outbound")
+        self.assertEqual(self.campaign_a.crm_team_id.campaign_state, "active")
         members = self.env["crm.team.member"].sudo().search([
             ("crm_team_id", "=", self.campaign_a.crm_team_id.id), ("active", "=", True)
         ])
@@ -103,22 +110,31 @@ class TestCallCenterCRMPhase1(TransactionCase):
         supervisor = self.env["crm.lead"].with_user(self.sup_a).search([("id", "=", own.id)])
         self.assertEqual(supervisor, own)
 
-    def test_05_saved_lead_lock_and_delete_export_protection(self):
+    def test_05_safe_lead_edits_reassignment_delete_export_and_archive(self):
         lead = self.env["crm.lead"].with_user(self.agent_a1).create({
-            "name": "Locked Lead", "phone": "8095550103"
+            "name": "Editable Lead", "phone": "8095550103"
         })
+        lead.with_user(self.agent_a1).write({"name": "Agent Edit"})
+        self.assertEqual(lead.name, "Agent Edit")
         with self.assertRaises(AccessError):
-            lead.with_user(self.agent_a1).write({"name": "Agent Edit"})
+            lead.with_user(self.agent_a1).write({"user_id": self.agent_a2.id})
+
+        lead.with_user(self.sup_a).write({"name": "Supervisor Edit"})
+        lead.with_user(self.sup_a).write({"user_id": self.agent_a2.id})
+        self.assertEqual(lead.user_id, self.agent_a2)
+
         with self.assertRaises(AccessError):
-            lead.with_user(self.sup_a).write({"name": "Supervisor Edit"})
-        lead.with_user(self.ops).write({"name": "Admin Edit"})
-        self.assertEqual(lead.name, "Admin Edit")
+            lead.with_user(self.agent_a2).export_data(["name", "phone"])
+        with self.assertRaises(AccessError):
+            lead.with_user(self.sup_a).export_data(["name", "phone"])
         with self.assertRaises(AccessError):
             lead.with_user(self.ops).unlink()
-        with self.assertRaises(AccessError):
-            lead.with_user(self.agent_a1).export_data(["name", "phone"])
-        lead.with_user(self.ops).write({"active": False})
+
+        lead.with_user(self.sup_a).write({"active": False})
         self.assertFalse(lead.active)
+        lead.with_user(self.ops).write({"active": True, "name": "Admin Edit"})
+        self.assertTrue(lead.active)
+        self.assertEqual(lead.name, "Admin Edit")
 
     def test_06_generic_import_is_blocked_for_agent(self):
         with self.assertRaises(AccessError):
@@ -201,14 +217,25 @@ class TestCallCenterCRMPhase1(TransactionCase):
         campaign.action_assign_agent(self.agent_a1)
         campaign.action_ready()
         campaign.action_activate()
-        campaign.action_pause()
+        with self.assertRaises(ValidationError):
+            campaign.action_pause()
+        campaign.action_pause("Client requested temporary stop")
         campaign.action_resume()
-        campaign.action_close()
+        with self.assertRaises(ValidationError):
+            campaign.action_close()
+        campaign.action_close("Campaign period completed")
         self.assertEqual(campaign.state, "closed")
         with self.assertRaises(ValidationError):
             campaign.action_activate()
-        campaign.action_archive()
+        duplicate = campaign.action_duplicate_as_draft("LIFE-2")
+        self.assertEqual(duplicate.state, "draft")
+        self.assertTrue(duplicate.active)
+        self.assertFalse(duplicate.assignment_ids.filtered(lambda a: a.role == "agent"))
+        with self.assertRaises(ValidationError):
+            campaign.action_archive()
+        campaign.action_archive("Reporting period sealed")
         self.assertFalse(campaign.active)
+        self.assertFalse(campaign.crm_team_id.active)
         logs = self.env["callcenter.campaign.state.log"].sudo().search([
             ("campaign_id", "=", campaign.id)
         ])
@@ -283,15 +310,17 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertEqual(wizard.batch_id.total_rows, 1)
         self.assertEqual(wizard.batch_id.error_count, 0)
 
-    def test_16_supervisor_create_is_unassigned_and_saved_locked(self):
+    def test_16_supervisor_create_is_unassigned_and_editable_in_scope(self):
         lead = self.env["crm.lead"].with_user(self.sup_a).create({
             "name": "Supervisor Lead", "phone": "8095550700",
             "cc_campaign_id": self.campaign_a.id,
         })
         self.assertFalse(lead.user_id)
         self.assertEqual(lead.queue_state, "available")
+        lead.with_user(self.sup_a).write({"name": "Supervisor Edited"})
+        self.assertEqual(lead.name, "Supervisor Edited")
         with self.assertRaises(AccessError):
-            lead.with_user(self.sup_a).write({"name": "No"})
+            lead.with_user(self.sup_a).write({"cc_campaign_id": self.campaign_b.id})
 
     def test_17_closed_campaign_blocks_new_operational_activity(self):
         now = fields.Datetime.now()
@@ -303,7 +332,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         campaign.action_assign_agent(self.agent_a1)
         campaign.action_ready()
         campaign.action_activate()
-        campaign.action_close()
+        campaign.action_close("Completed")
         with self.assertRaises(ValidationError):
             campaign.action_assign_agent(self.agent_a2)
         with self.assertRaises(AccessError):
@@ -327,3 +356,50 @@ class TestCallCenterCRMPhase1(TransactionCase):
             ("id", "=", self.campaign_a.crm_team_id.id)
         ])
         self.assertEqual(native_team, self.campaign_a.crm_team_id)
+        with self.assertRaises(AccessError):
+            self.campaign_a.with_user(technical_admin).write({"description": "Forbidden operational edit"})
+        with self.assertRaises(AccessError):
+            native_team.with_user(technical_admin).write({"name": "Forbidden native edit"})
+
+    def test_20_paused_and_closed_campaign_history_is_read_only_but_visible(self):
+        lead = self.env["crm.lead"].with_user(self.agent_a1).create({
+            "name": "Historical Lead", "phone": "8095550900"
+        })
+        self.campaign_a.with_user(self.ops).action_pause("Client pause")
+        visible_agent = self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead.id)])
+        visible_supervisor = self.env["crm.lead"].with_user(self.sup_a).search([("id", "=", lead.id)])
+        self.assertEqual(visible_agent, lead)
+        self.assertEqual(visible_supervisor, lead)
+        with self.assertRaises(AccessError):
+            lead.with_user(self.agent_a1).write({"name": "No paused edit"})
+        with self.assertRaises(AccessError):
+            lead.with_user(self.sup_a).write({"name": "No paused supervisor edit"})
+        self.campaign_a.with_user(self.ops).action_close("Campaign complete")
+        self.assertEqual(
+            self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead.id)]),
+            lead,
+        )
+        self.assertEqual(
+            self.env["crm.lead"].with_user(self.sup_a).search([("id", "=", lead.id)]),
+            lead,
+        )
+
+    def test_21_preloaded_non_active_leads_remain_unassigned(self):
+        now = fields.Datetime.now()
+        campaign = self.env["callcenter.campaign"].with_user(self.ops).create({
+            "name": "Preload", "code": "PRELOAD-1", "campaign_type": "outbound",
+            "primary_supervisor_id": self.sup_a.id,
+            "start_at": now + timedelta(days=1),
+            "end_at": now + timedelta(days=30),
+        })
+        campaign.action_assign_agent(self.agent_a1)
+        lead = self.env["crm.lead"].with_user(self.ops).create({
+            "name": "Draft preload", "phone": "8095550999", "cc_campaign_id": campaign.id,
+        })
+        self.assertFalse(lead.user_id)
+        self.assertEqual(lead.queue_state, "available")
+        with self.assertRaises(AccessError):
+            self.env["crm.lead"].with_user(self.ops).create({
+                "name": "Assigned draft preload", "phone": "8095550998",
+                "cc_campaign_id": campaign.id, "user_id": self.agent_a1.id,
+            })

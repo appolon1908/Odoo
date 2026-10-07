@@ -29,10 +29,11 @@
                     <button name="action_ready" type="object" string="Ready" invisible="state != 'draft'" groups="callcenter_crm.group_callcenter_superuser"/>
                     <button name="action_back_to_draft" type="object" string="Back to Draft" invisible="state != 'ready'" groups="callcenter_crm.group_callcenter_superuser"/>
                     <button name="action_activate" type="object" string="Activate" invisible="state != 'ready'" groups="callcenter_crm.group_callcenter_superuser"/>
-                    <button name="action_pause" type="object" string="Pause" invisible="state != 'active'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_pause_wizard" type="object" string="Pause" invisible="state != 'active'" groups="callcenter_crm.group_callcenter_superuser"/>
                     <button name="action_resume" type="object" string="Resume" invisible="state != 'paused'" groups="callcenter_crm.group_callcenter_superuser"/>
-                    <button name="action_close" type="object" string="Close" invisible="state not in ('active','paused')" groups="callcenter_crm.group_callcenter_superuser"/>
-                    <button name="action_archive" type="object" string="Archive" invisible="state != 'closed' or not active" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_close_wizard" type="object" string="Close" invisible="state not in ('active','paused')" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_archive_wizard" type="object" string="Archive" invisible="state != 'closed' or not active" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_duplicate_wizard" type="object" string="Duplicate as Draft" invisible="state != 'closed'" groups="callcenter_crm.group_callcenter_superuser"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,ready,active,paused,closed"/>
                 </header>
                 <sheet>

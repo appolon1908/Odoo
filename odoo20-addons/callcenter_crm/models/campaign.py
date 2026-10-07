@@ -1,4 +1,4 @@
-from odoo import api, fields, models, _
+from odoo import Command, api, fields, models, _
 from odoo.exceptions import AccessError, ValidationError
 
 
@@ -269,6 +269,8 @@ class CallCenterCampaign(models.Model):
     def _transition(self, to_state, reason=None, bypass_auth=False):
         if not bypass_auth and not self._can_manage():
             raise AccessError(_("Only the Call Center Super User may perform campaign lifecycle transitions."))
+        if to_state in {"paused", "closed"} and not str(reason or "").strip():
+            raise ValidationError(_("Pause and Close transitions require an audit reason."))
         allowed = {
             "draft": {"ready"},
             "ready": {"draft", "active"},
@@ -281,15 +283,20 @@ class CallCenterCampaign(models.Model):
         for campaign in self:
             if to_state not in allowed[campaign.state]:
                 raise ValidationError(
-                    _("Invalid campaign transition: %(from_state)s → %(to_state)s", from_state=campaign.state, to_state=to_state)
+                    _("Invalid campaign transition: %(from_state)s → %(to_state)s",
+                      from_state=campaign.state, to_state=to_state)
                 )
             if to_state in {"ready", "active"}:
                 campaign._validate_ready()
             old = campaign.state
             super(CallCenterCampaign, campaign.sudo()).write({"state": to_state})
             self.env["callcenter.campaign.state.log"].sudo().create({
-                "campaign_id": campaign.id, "from_state": old, "to_state": to_state,
-                "changed_by_id": actor_id, "changed_at": now, "reason": reason or False,
+                "campaign_id": campaign.id,
+                "from_state": old,
+                "to_state": to_state,
+                "changed_by_id": actor_id,
+                "changed_at": now,
+                "reason": str(reason or "").strip() or False,
             })
             if to_state == "closed":
                 campaign.assignment_ids.filtered(
@@ -306,18 +313,20 @@ class CallCenterCampaign(models.Model):
     def action_activate(self):
         return self._transition("active", _("Campaign activated"))
 
-    def action_pause(self):
-        return self._transition("paused", _("Campaign paused"))
+    def action_pause(self, reason=None):
+        return self._transition("paused", reason)
 
     def action_resume(self):
         return self._transition("active", _("Campaign resumed"))
 
-    def action_close(self):
-        return self._transition("closed", _("Campaign closed"))
+    def action_close(self, reason=None):
+        return self._transition("closed", reason)
 
-    def action_archive(self):
+    def action_archive(self, reason=None):
         if not self._can_manage():
             raise AccessError(_("Only the Call Center Super User may archive campaigns."))
+        if not str(reason or "").strip():
+            raise ValidationError(_("Archiving requires an audit reason."))
         actor_id = self.env.user.id
         now = fields.Datetime.now()
         for campaign in self:
@@ -327,10 +336,79 @@ class CallCenterCampaign(models.Model):
                 super(CallCenterCampaign, campaign.sudo()).write({"active": False})
                 campaign.crm_team_id.sudo().write({"active": False})
                 self.env["callcenter.campaign.state.log"].sudo().create({
-                    "campaign_id": campaign.id, "from_state": "closed", "to_state": "archived",
-                    "changed_by_id": actor_id, "changed_at": now, "reason": _("Campaign archived"),
+                    "campaign_id": campaign.id,
+                    "from_state": "closed",
+                    "to_state": "archived",
+                    "changed_by_id": actor_id,
+                    "changed_at": now,
+                    "reason": str(reason).strip(),
                 })
         return True
+
+    def _open_lifecycle_wizard(self, operation):
+        self.ensure_one()
+        if not self._can_manage():
+            raise AccessError(_("Only the Call Center Super User may perform campaign lifecycle transitions."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Campaign Lifecycle"),
+            "res_model": "callcenter.campaign.lifecycle.wizard",
+            "view_mode": "form",
+            "view_id": self.env.ref(
+                "callcenter_crm.view_callcenter_campaign_lifecycle_wizard_form"
+            ).id,
+            "target": "new",
+            "context": {
+                "default_campaign_id": self.id,
+                "default_operation": operation,
+            },
+        }
+
+    def action_open_pause_wizard(self):
+        self.ensure_one()
+        if self.state != "active":
+            raise ValidationError(_("Only an Active campaign can be paused."))
+        return self._open_lifecycle_wizard("pause")
+
+    def action_open_close_wizard(self):
+        self.ensure_one()
+        if self.state not in {"active", "paused"}:
+            raise ValidationError(_("Only Active or Paused campaigns can be closed."))
+        return self._open_lifecycle_wizard("close")
+
+    def action_open_archive_wizard(self):
+        self.ensure_one()
+        if self.state != "closed" or not self.active:
+            raise ValidationError(_("Only a Closed campaign can be archived."))
+        return self._open_lifecycle_wizard("archive")
+
+    def action_open_duplicate_wizard(self):
+        self.ensure_one()
+        if self.state != "closed":
+            raise ValidationError(_("Only a Closed campaign can be duplicated as a new run."))
+        return self._open_lifecycle_wizard("duplicate")
+
+    def action_duplicate_as_draft(self, new_code):
+        self.ensure_one()
+        if not self._can_manage():
+            raise AccessError(_("Only the Call Center Super User may duplicate campaigns."))
+        if self.state != "closed":
+            raise ValidationError(_("Only a Closed campaign can be duplicated as a new run."))
+        code = str(new_code or "").strip().upper()
+        if not code:
+            raise ValidationError(_("A new Campaign Code is required."))
+        return self.create({
+            "name": self.name,
+            "code": code,
+            "company_id": self.company_id.id,
+            "campaign_type": self.campaign_type,
+            "primary_supervisor_id": self.primary_supervisor_id.id or False,
+            "backup_supervisor_ids": [Command.set(self.backup_supervisor_ids.ids)],
+            "client_id": self.client_id.id or False,
+            "description": self.description,
+            "start_at": False,
+            "end_at": False,
+        })
 
     @api.model
     def _cron_pause_expired_campaigns(self):
