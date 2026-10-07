@@ -23,8 +23,8 @@
     "call_center_campaign": {
       "classification": "CANONICAL",
       "domain": "campaign",
-      "rationale": "Physical campaign and integration authority plus the governed native crm.team operational campaign facade, Agent assignment history, supervisor history, reason-gated lifecycle audit, and Active-state lead/call gate. Runtime provider provisioning authority remains in codestra_campaign_control_plane.",
-      "version": "19.0.6.0.0",
+      "rationale": "Physical campaign record (call.center.campaign), Middleware integration API for the shared contract, runtime integration outbox/inbox, traces and nonces. Automatic design provisioning is present but its outbox cron ships inactive and unloaded; runtime provisioning authority belongs to the control plane.",
+      "version": "19.0.5.4.0",
       "models": [
         "call.center.campaign",
         "call.center.campaign.country.policy",
@@ -35,9 +35,6 @@
         "call.center.script",
         "call.center.skill.requirement",
         "call.center.team",
-        "callcenter.campaign.assignment",
-        "callcenter.campaign.state.log",
-        "callcenter.campaign.transition.wizard",
         "codestra.disposition",
         "codestra.integration.callback.nonce",
         "codestra.integration.result.inbox",
@@ -432,9 +429,13 @@
     "codestra_cc_campaign": {
       "classification": "COMPATIBILITY",
       "domain": "campaign",
-      "rationale": "Facade only (no models); keeps installation paths stable.",
-      "version": "19.0.1.0.0",
-      "models": [],
+      "rationale": "Governed native crm.team operational campaign facade. Owns Agent assignment history synchronized to crm.team.member, Primary/Backup Supervisor history, reason-gated Draft/Ready/Active/Paused/Closed operational state, archived active=False projection, and fail-closed lead/call gates. It does not replace cc.campaign or codestra_campaign_control_plane as canonical platform/runtime authority.",
+      "version": "19.0.2.0.0",
+      "models": [
+        "callcenter.campaign.assignment",
+        "callcenter.campaign.state.log",
+        "callcenter.campaign.transition.wizard"
+      ],
       "routes": 0,
       "sudo_sites": 0,
       "has_tests": true

@@ -567,7 +567,7 @@ class CrmTeamCallCenterCampaign(models.Model):
             "res_model": "callcenter.campaign.transition.wizard",
             "view_mode": "form",
             "view_id": self.env.ref(
-                "call_center_campaign.view_callcenter_campaign_transition_wizard_form"
+                "codestra_cc_campaign.view_callcenter_campaign_transition_wizard_form"
             ).id,
             "target": "new",
             "context": {
@@ -640,7 +640,7 @@ class CrmTeamCallCenterCampaign(models.Model):
             "res_id": duplicate.id,
             "view_mode": "form",
             "view_id": self.env.ref(
-                "call_center_campaign.view_callcenter_crm_team_campaign_form"
+                "codestra_cc_campaign.view_callcenter_crm_team_campaign_form"
             ).id,
             "target": "current",
         }

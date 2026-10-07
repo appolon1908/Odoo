@@ -15,5 +15,3 @@ from . import automatic_provisioning_campaign_events
 from . import automatic_provisioning_campaign_approval
 from . import automatic_provisioning_outbox
 from . import automation_results
-
-from . import campaign_lifecycle_team
