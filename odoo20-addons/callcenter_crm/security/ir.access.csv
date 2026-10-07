@@ -1,0 +1,37 @@
+id,name,model_id,group_id/id,operation,domain
+cc_campaign_agent,Call Center campaign agent read,model_callcenter_campaign,callcenter_crm.group_callcenter_agent,r,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','agent'),('active','=',True)])]"
+cc_campaign_supervisor,Call Center campaign supervisor read,model_callcenter_campaign,callcenter_crm.group_callcenter_supervisor,r,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
+cc_campaign_superuser,Call Center campaign superuser,model_callcenter_campaign,callcenter_crm.group_callcenter_superuser,cru,"[('assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_campaign_system,Call Center campaign technical admin,model_callcenter_campaign,base.group_system,crud,
+cc_assignment_agent,Campaign assignment own history,model_callcenter_campaign_assignment,callcenter_crm.group_callcenter_agent,r,"[('user_id','=',user.id)]"
+cc_assignment_supervisor,Campaign assignment supervised campaigns,model_callcenter_campaign_assignment,callcenter_crm.group_callcenter_supervisor,r,"['|',('user_id','=',user.id),('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
+cc_assignment_superuser,Campaign assignment superuser,model_callcenter_campaign_assignment,callcenter_crm.group_callcenter_superuser,cru,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_assignment_system,Campaign assignment technical admin,model_callcenter_campaign_assignment,base.group_system,crud,
+cc_state_log_agent,Campaign state history agent,model_callcenter_campaign_state_log,callcenter_crm.group_callcenter_agent,r,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_state_log_supervisor,Campaign state history supervisor,model_callcenter_campaign_state_log,callcenter_crm.group_callcenter_supervisor,r,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_state_log_superuser,Campaign state history superuser,model_callcenter_campaign_state_log,callcenter_crm.group_callcenter_superuser,r,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_state_log_system,Campaign state history technical admin,model_callcenter_campaign_state_log,base.group_system,crud,
+cc_lead_assignment_agent,Lead assignment own history,model_callcenter_lead_assignment,callcenter_crm.group_callcenter_agent,r,"[('agent_id','=',user.id)]"
+cc_lead_assignment_supervisor,Lead assignment supervised,model_callcenter_lead_assignment,callcenter_crm.group_callcenter_supervisor,r,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
+cc_lead_assignment_superuser,Lead assignment superuser,model_callcenter_lead_assignment,callcenter_crm.group_callcenter_superuser,r,"[('campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_lead_assignment_system,Lead assignment technical admin,model_callcenter_lead_assignment,base.group_system,crud,
+cc_import_batch_superuser,Lead import batch superuser,model_callcenter_lead_import_batch,callcenter_crm.group_callcenter_superuser,cru,
+cc_import_batch_system,Lead import batch technical admin,model_callcenter_lead_import_batch,base.group_system,crud,
+cc_import_line_superuser,Lead import line superuser,model_callcenter_lead_import_line,callcenter_crm.group_callcenter_superuser,cru,
+cc_import_line_system,Lead import line technical admin,model_callcenter_lead_import_line,base.group_system,crud,
+cc_import_wizard_superuser,Lead import wizard superuser,model_callcenter_lead_import_wizard,callcenter_crm.group_callcenter_superuser,cru,
+cc_import_wizard_system,Lead import wizard technical admin,model_callcenter_lead_import_wizard,base.group_system,crud,
+cc_role_wizard_superuser,Role wizard superuser,model_callcenter_role_assignment_wizard,callcenter_crm.group_callcenter_superuser,cru,
+cc_role_wizard_system,Role wizard technical admin,model_callcenter_role_assignment_wizard,base.group_system,crud,
+cc_team_agent,Call Center native team agent read,crm.team,callcenter_crm.group_callcenter_agent,r,"[('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_team_supervisor,Call Center native team supervisor read,crm.team,callcenter_crm.group_callcenter_supervisor,r,"[('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_team_superuser,Call Center native team superuser read,crm.team,callcenter_crm.group_callcenter_superuser,r,"[('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_team_restriction,Protect call-center native teams,crm.team,,crud,"['|',('cc_campaign_id','=',False),('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_member_agent,Call Center native membership own read,crm.team.member,callcenter_crm.group_callcenter_agent,r,"[('user_id','=',user.id)]"
+cc_member_supervisor,Call Center native membership supervisor read,crm.team.member,callcenter_crm.group_callcenter_supervisor,r,"[('crm_team_id.cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
+cc_member_superuser,Call Center native membership superuser read,crm.team.member,callcenter_crm.group_callcenter_superuser,r,"[('crm_team_id.cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_member_restriction,Protect call-center native memberships,crm.team.member,,crud,"['|',('crm_team_id.cc_campaign_id','=',False),('crm_team_id.cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
+cc_lead_agent,Call Center lead agent create read,crm.lead,callcenter_crm.group_callcenter_agent,cr,"[('cc_campaign_id','!=',False),('user_id','=',user.id),('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','agent'),('active','=',True)])]"
+cc_lead_supervisor,Call Center lead supervisor create read,crm.lead,callcenter_crm.group_callcenter_supervisor,cr,"[('cc_campaign_id','!=',False),('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','supervisor'),('active','=',True)])]"
+cc_lead_superuser,Call Center lead superuser create read update,crm.lead,callcenter_crm.group_callcenter_superuser,cru,"[('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('role','=','admin'),('active','=',True)])]"
+cc_lead_restriction,Protect call-center leads from standard CRM groups,crm.lead,,crud,"['|',('cc_campaign_id','=',False),('cc_campaign_id.assignment_ids','any',[('user_id','=',user.id),('active','=',True)])]"
