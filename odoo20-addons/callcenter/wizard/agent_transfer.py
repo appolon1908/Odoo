@@ -1,5 +1,5 @@
 from odoo import fields, models, _
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, ValidationError
 
 
 class CallCenterAgentTransferWizard(models.TransientModel):
@@ -10,7 +10,14 @@ class CallCenterAgentTransferWizard(models.TransientModel):
         "res.users",
         string="Agent",
         required=True,
-        domain=[("share", "=", False)],
+        domain=lambda self: [
+            ("share", "=", False),
+            (
+                "all_group_ids",
+                "in",
+                self.env.ref("callcenter.group_callcenter_agent").id,
+            ),
+        ],
     )
     campaign_id = fields.Many2one(
         "crm.team",
@@ -32,7 +39,15 @@ class CallCenterAgentTransferWizard(models.TransientModel):
             or self.env.user.has_group("callcenter.group_callcenter_superuser")
         ):
             raise AccessError(
-                _("Only the Call Center Super User or a technical administrator may transfer agents.")
+                _(
+                    "Only the Call Center Super User or a technical administrator "
+                    "may transfer agents."
+                )
+            )
+        agent_group = self.env.ref("callcenter.group_callcenter_agent")
+        if agent_group not in self.user_id.sudo().all_group_ids:
+            raise ValidationError(
+                _("The selected user does not have the Call Center Agent role.")
             )
 
         self.user_id.action_assign_callcenter_campaign(

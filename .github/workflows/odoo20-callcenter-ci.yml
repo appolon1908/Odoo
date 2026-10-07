@@ -1,0 +1,50 @@
+name: Odoo 20 Call Center CI
+
+on:
+  pull_request:
+    paths:
+      - "odoo20-addons/callcenter/**"
+      - "odoo20-addons/README.md"
+      - "scripts/run_odoo20_callcenter_tests.sh"
+      - "deploy/compose/compose.server3.odoo20.yaml"
+      - "docs/SERVER3-ODOO20-INTEGRATION.md"
+      - ".github/workflows/odoo20-callcenter-ci.yml"
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - "odoo20-addons/callcenter/**"
+      - "odoo20-addons/README.md"
+      - "scripts/run_odoo20_callcenter_tests.sh"
+      - "deploy/compose/compose.server3.odoo20.yaml"
+      - "docs/SERVER3-ODOO20-INTEGRATION.md"
+      - ".github/workflows/odoo20-callcenter-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: odoo20-callcenter-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-spec-1:
+    name: Certify SPEC-1 on Odoo 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source identity
+        run: |
+          printf 'CERTIFICATION_SHA=%s\n' "$(git rev-parse HEAD)"
+
+      - name: Run Odoo 20 SPEC-1 certification
+        run: bash scripts/run_odoo20_callcenter_tests.sh

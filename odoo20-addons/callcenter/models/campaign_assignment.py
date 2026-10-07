@@ -24,10 +24,7 @@ class CallCenterCampaignAssignment(models.Model):
         domain=[("share", "=", False)],
     )
     role = fields.Selection(
-        [
-            ("agent", "Agent"),
-            ("supervisor", "Supervisor"),
-        ],
+        [("agent", "Agent"), ("supervisor", "Supervisor")],
         required=True,
         index=True,
     )
@@ -67,7 +64,27 @@ class CallCenterCampaignAssignment(models.Model):
     def _check_dates(self):
         for assignment in self:
             if assignment.date_to and assignment.date_to < assignment.date_from:
-                raise ValidationError(_("Assignment end time cannot precede its start time."))
+                raise ValidationError(
+                    _("Assignment end time cannot precede its start time.")
+                )
+
+    @api.constrains("user_id", "role")
+    def _check_role_group(self):
+        agent_group = self.env.ref("callcenter.group_callcenter_agent")
+        supervisor_group = self.env.ref("callcenter.group_callcenter_supervisor")
+        for assignment in self:
+            user_groups = assignment.user_id.sudo().all_group_ids
+            required_group = (
+                supervisor_group if assignment.role == "supervisor" else agent_group
+            )
+            if required_group not in user_groups:
+                raise ValidationError(
+                    _(
+                        "%(user)s must belong to the %(role)s call-center security group.",
+                        user=assignment.user_id.display_name,
+                        role=assignment.role,
+                    )
+                )
 
     @api.constrains("user_id", "campaign_id", "role", "is_primary", "active")
     def _check_active_invariants(self):

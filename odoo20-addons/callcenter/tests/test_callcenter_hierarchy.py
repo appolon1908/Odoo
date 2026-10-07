@@ -44,6 +44,13 @@ class TestCallCenterHierarchy(TransactionCase):
                 "group_ids": [Command.link(cls.agent_group.id)],
             }
         )
+        cls.non_callcenter_user = cls.Users.create(
+            {
+                "name": "Ordinary User",
+                "login": "ordinary.user@example.test",
+                "email": "ordinary.user@example.test",
+            }
+        )
 
         cls.Team = cls.env["crm.team"].with_user(cls.ops_superuser)
         cls.campaign_a = cls.Team.create(
@@ -163,6 +170,12 @@ class TestCallCenterHierarchy(TransactionCase):
                 self.campaign_a
             )
 
+    def test_non_supervisor_cannot_be_campaign_supervisor(self):
+        with self.assertRaises(ValidationError):
+            self.campaign_a.with_user(self.ops_superuser).write(
+                {"primary_supervisor_id": self.non_callcenter_user.id}
+            )
+
     def test_primary_supervisor_cannot_also_be_backup(self):
         with self.assertRaises(ValidationError):
             self.campaign_a.with_user(self.ops_superuser).write(
@@ -179,16 +192,10 @@ class TestCallCenterHierarchy(TransactionCase):
         )
         Lead = self.env["crm.lead"].with_user(self.ops_superuser)
         lead_a = Lead.create(
-            {
-                "name": "Campaign A Lead",
-                "team_id": self.campaign_a.id,
-            }
+            {"name": "Campaign A Lead", "team_id": self.campaign_a.id}
         )
         lead_b = Lead.create(
-            {
-                "name": "Campaign B Lead",
-                "team_id": self.campaign_b.id,
-            }
+            {"name": "Campaign B Lead", "team_id": self.campaign_b.id}
         )
 
         visible = self.env["crm.lead"].with_user(self.agent).search(

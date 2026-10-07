@@ -14,7 +14,15 @@ Server 3 must consume reviewed Git commits. Do not edit application source insid
 
 ## Odoo 20 runtime
 
-The Server 3 runtime uses reviewed digest-pinned Odoo 20 and PostgreSQL 16 images. The existing `custom-addons/` tree was originally certified for Odoo 19. It is mounted read-only into Odoo 20 for migration and compatibility testing, but modules must not be installed or upgraded automatically until their Odoo 20 compatibility tests pass.
+The Server 3 runtime uses reviewed digest-pinned Odoo 20 and PostgreSQL 16 images.
+
+Odoo 20-compatible modules live in `odoo20-addons/`. The legacy `custom-addons/` tree remains governed by the Odoo 19 validation baseline and is not mounted into the Odoo 20 application container.
+
+The initial Odoo 20 call-center hierarchy module is:
+
+- `odoo20-addons/callcenter`
+- security groups: `callcenter.group_callcenter_agent`, `callcenter.group_callcenter_supervisor`, `callcenter.group_callcenter_superuser`
+- operational super user remains separate from `base.group_system`
 
 Create the untracked secret file:
 
@@ -28,11 +36,11 @@ Initialize the staging database once before the first start:
 
 ```bash
 set -a; . ./.env.server3; set +a
-docker run --rm --network compose_default \\
-  -v compose_odoo20-data:/var/lib/odoo \\
-  -v /srv/codestra/apps/Odoo/custom-addons:/mnt/extra-addons:ro \\
-  --entrypoint odoo \\
-  odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533 \\
+docker run --rm --network compose_default \
+  -v compose_odoo20-data:/var/lib/odoo \
+  -v /srv/codestra/apps/Odoo/odoo20-addons:/mnt/extra-addons:ro \
+  --entrypoint odoo \
+  odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533 \
   db --db_host=db --db_port=5432 --db_user=odoo --db_password="$POSTGRES_PASSWORD" init codestra_odoo20_staging
 ```
 
@@ -44,11 +52,20 @@ Start the isolated stack:
 docker compose --env-file .env.server3 -f deploy/compose/compose.server3.odoo20.yaml up -d
 ```
 
-Inspect:
+Install or upgrade SPEC-1 only from a reviewed commit:
 
 ```bash
-docker compose --env-file .env.server3 -f deploy/compose/compose.server3.odoo20.yaml ps
-curl -I http://10.0.0.218:8069
+set -a; . ./.env.server3; set +a
+docker compose --env-file .env.server3 -f deploy/compose/compose.server3.odoo20.yaml run --rm odoo \
+  --database=codestra_odoo20_staging \
+  --init=callcenter \
+  --stop-after-init
+```
+
+Before promotion, run the repository certification gate:
+
+```bash
+bash scripts/run_odoo20_callcenter_tests.sh
 ```
 
 ## Development-to-server synchronization

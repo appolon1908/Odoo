@@ -20,7 +20,14 @@ class CrmTeam(models.Model):
     primary_supervisor_id = fields.Many2one(
         "res.users",
         string="Primary Supervisor",
-        domain=[("share", "=", False)],
+        domain=lambda self: [
+            ("share", "=", False),
+            (
+                "all_group_ids",
+                "in",
+                self.env.ref("callcenter.group_callcenter_supervisor").id,
+            ),
+        ],
         ondelete="restrict",
         tracking=True,
     )
@@ -30,7 +37,14 @@ class CrmTeam(models.Model):
         "campaign_id",
         "user_id",
         string="Backup Supervisors",
-        domain=[("share", "=", False)],
+        domain=lambda self: [
+            ("share", "=", False),
+            (
+                "all_group_ids",
+                "in",
+                self.env.ref("callcenter.group_callcenter_supervisor").id,
+            ),
+        ],
         tracking=True,
     )
     campaign_status = fields.Selection(
@@ -69,10 +83,26 @@ class CrmTeam(models.Model):
         "campaign_end_date",
     )
     def _check_callcenter_campaign_configuration(self):
+        supervisor_group = self.env.ref("callcenter.group_callcenter_supervisor")
         for campaign in self:
             if campaign.is_callcenter_campaign and not campaign.campaign_code:
                 raise ValidationError(
                     _("A call-center campaign requires a campaign code.")
+                )
+            if (
+                campaign.primary_supervisor_id
+                and supervisor_group
+                not in campaign.primary_supervisor_id.sudo().all_group_ids
+            ):
+                raise ValidationError(
+                    _("The primary supervisor must have the Call Center Supervisor role.")
+                )
+            invalid_backups = campaign.backup_supervisor_ids.filtered(
+                lambda user: supervisor_group not in user.sudo().all_group_ids
+            )
+            if invalid_backups:
+                raise ValidationError(
+                    _("Every backup supervisor must have the Call Center Supervisor role.")
                 )
             if (
                 campaign.primary_supervisor_id
@@ -111,7 +141,10 @@ class CrmTeam(models.Model):
         if any(managed_fields.intersection(vals) for vals in vals_list):
             if not self._callcenter_can_manage_hierarchy():
                 raise AccessError(
-                    _("Only the Call Center Super User or a technical administrator may manage campaign hierarchy.")
+                    _(
+                        "Only the Call Center Super User or a technical administrator "
+                        "may manage campaign hierarchy."
+                    )
                 )
         campaigns = super().create(vals_list)
         for campaign in campaigns.filtered("is_callcenter_campaign"):
@@ -133,7 +166,10 @@ class CrmTeam(models.Model):
         hierarchy_change = bool(managed_fields.intersection(vals))
         if hierarchy_change and not self._callcenter_can_manage_hierarchy():
             raise AccessError(
-                _("Only the Call Center Super User or a technical administrator may manage campaign hierarchy.")
+                _(
+                    "Only the Call Center Super User or a technical administrator "
+                    "may manage campaign hierarchy."
+                )
             )
         result = super().write(vals)
         if hierarchy_change and not self.env.context.get(
@@ -170,9 +206,7 @@ class CrmTeam(models.Model):
                     expected_primary is None
                     or expected_primary != assignment.is_primary
                 ):
-                    assignment.with_context(
-                        skip_callcenter_assignment_sync=True
-                    ).action_close(now)
+                    assignment.action_close(now)
 
             for user_id, is_primary in desired.items():
                 exists = Assignment.search_count(
