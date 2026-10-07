@@ -16,6 +16,13 @@
         <field name="context">{'default_type': 'lead'}</field>
     </record>
 
+    <record id="action_callcenter_reporting" model="ir.actions.act_window">
+        <field name="name">Call Center Reporting</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">graph,pivot,list,form</field>
+        <field name="domain">[('team_id.is_callcenter_campaign', '=', True)]</field>
+    </record>
+
     <menuitem id="menu_callcenter_root"
               name="Call Center"
               web_icon="crm,static/description/icon.png"
@@ -43,11 +50,18 @@
               sequence="15"
               groups="callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
 
+    <menuitem id="menu_callcenter_reporting"
+              name="Reporting"
+              parent="menu_callcenter_root"
+              action="action_callcenter_reporting"
+              sequence="20"
+              groups="callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
+
     <menuitem id="menu_callcenter_assignment_history"
               name="Assignment History"
               parent="menu_callcenter_root"
               action="action_callcenter_campaign_assignments"
-              sequence="20"
+              sequence="25"
               groups="callcenter.group_callcenter_agent,callcenter.group_callcenter_supervisor,callcenter.group_callcenter_superuser"/>
 
     <menuitem id="menu_callcenter_transfer_agent"
