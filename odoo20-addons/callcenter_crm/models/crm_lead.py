@@ -273,7 +273,7 @@ class CrmLead(models.Model):
             vals["team_id"] = campaign.crm_team_id.id
 
             phone = vals.get("phone", lead.phone)
-            mobile = vals.get("mobile", lead.mobile)
+            mobile = vals.get("mobile", lead["mobile"] if "mobile" in lead._fields else False)
             email = vals.get("email_from", lead.email_from)
             external_id = (
                 vals.get("source_external_id", lead.source_external_id) or ""
