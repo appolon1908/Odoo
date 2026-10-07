@@ -474,8 +474,8 @@
     "codestra_cc_crm": {
       "classification": "CANONICAL",
       "domain": "crm",
-      "rationale": "CRM service group and lead ownership rules for the cc line.",
-      "version": "19.0.1.0.1",
+      "rationale": "Canonical CRM lead/customer-profile authority with assigned-only agent visibility, supervised-campaign reassignment, governed cross-campaign transfer, retention, and export controls.",
+      "version": "19.0.1.1.0",
       "models": [
         "cc.customer.profile"
       ],
@@ -638,8 +638,8 @@
     "codestra_cc_security": {
       "classification": "CANONICAL",
       "domain": "roles",
-      "rationale": "Canonical group set (group_cc_*), campaign membership and break-glass grants that every cc record rule resolves through.",
-      "version": "19.0.1.0.0",
+      "rationale": "Canonical group/membership authority with Agent/Supervisor/operational Super User compatibility aliases, primary/backup supervisor scope, and technical-admin separation.",
+      "version": "19.0.1.1.0",
       "models": [
         "cc.break.glass.grant",
         "cc.campaign.membership"
