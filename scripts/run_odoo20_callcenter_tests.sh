@@ -40,6 +40,7 @@ done
 printf '==> Static Odoo 20 SPEC-1 validation\n'
 python3 -m compileall -q "$ADDONS_DIR/$MODULE"
 python3 -m py_compile scripts/callcenter_phase1_uat.py
+bash -n scripts/run_odoo20_callcenter_staging_uat.sh
 python3 - "$ADDONS_DIR/$MODULE" <<'PY'
 import ast
 import csv
