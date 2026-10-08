@@ -72,7 +72,7 @@ IMPORT_SOURCE_FIELDS = {
 
 
 def _is_callcenter_superuser(user):
-    return user.has_group("codestra_cc_security.group_cc_global_administrator")
+    return user.has_group("codestra_cc_security.group_cc_call_center_superuser")
 
 
 def _require_callcenter_superuser(env):

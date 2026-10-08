@@ -189,7 +189,7 @@ class TestCampaignSecurity(TransactionCase):
         )
         self.assertEqual(
             self.env.ref("callcenter.group_callcenter_superuser"),
-            self.env.ref("codestra_cc_security.group_cc_global_administrator"),
+            self.env.ref("codestra_cc_security.group_cc_call_center_superuser"),
         )
         self.assertFalse(
             self.requester.has_group("base.group_system"),

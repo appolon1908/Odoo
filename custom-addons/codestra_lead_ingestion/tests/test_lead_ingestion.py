@@ -57,7 +57,7 @@ class TestLeadIngestion(TransactionCase):
             "group_ids": [(6, 0, [
                 cls.env.ref("base.group_user").id,
                 cls.env.ref("codestra_lead_ingestion.group_lead_import_admin").id,
-                cls.env.ref("codestra_cc_security.group_cc_global_administrator").id,
+                cls.env.ref("codestra_cc_security.group_cc_call_center_superuser").id,
             ])],
         })
 

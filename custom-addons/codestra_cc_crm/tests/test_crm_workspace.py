@@ -29,6 +29,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-approver@example.invalid",
             ["codestra_cc_security.group_cc_global_administrator"],
         )
+        cls.call_center_superuser = cls._create_user(
+            "CRM Saved Lead Super User",
+            "cc-crm-saved-lead-superuser@example.invalid",
+            ["codestra_cc_security.group_cc_call_center_superuser"],
+        )
+        cls.technical_admin = cls._create_user(
+            "CRM Technical Administrator",
+            "cc-crm-technical@example.invalid",
+            ["codestra_cc_security.group_cc_technical_administrator"],
+        )
         cls.service = cls._create_user(
             "CRM Identity Service",
             "cc-crm-service@example.invalid",
@@ -290,10 +300,14 @@ class TestCampaignCrmWorkspace(TransactionCase):
 
     def test_saved_lead_reassignment_is_superuser_only(self):
         with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).action_callcenter_assign_agent(
+                self.agent_a2.id
+            )
+        with self.assertRaises(AccessError):
             self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
                 self.agent_a2.id
             )
-        self.lead_a.with_user(self.requester).action_callcenter_assign_agent(
+        self.lead_a.with_user(self.call_center_superuser).action_callcenter_assign_agent(
             self.agent_a2.id
         )
         self.assertEqual(self.lead_a.user_id, self.agent_a2)
@@ -305,7 +319,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(history.agent_id, self.agent_a2)
         self.assertEqual(history.assignment_source, "transfer")
         with self.assertRaises(ValidationError):
-            self.lead_a.with_user(self.requester).action_callcenter_assign_agent(
+            self.lead_a.with_user(self.call_center_superuser).action_callcenter_assign_agent(
                 self.agent_b.id
             )
         with self.assertRaises(UserError):
@@ -316,9 +330,9 @@ class TestCampaignCrmWorkspace(TransactionCase):
             self.lead_a.with_user(self.agent_a).action_archive()
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.supervisor_a).action_archive()
-        self.lead_a.with_user(self.requester).action_archive()
+        self.lead_a.with_user(self.call_center_superuser).action_archive()
         self.assertFalse(self.lead_a.active)
-        self.lead_a.with_user(self.requester).action_unarchive()
+        self.lead_a.with_user(self.call_center_superuser).action_unarchive()
         self.assertTrue(self.lead_a.active)
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
@@ -333,7 +347,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 target_user_id=self.agent_b.id,
                 target_profile_id=target_profile.id,
             )
-        self.lead_a.with_user(self.requester).action_callcenter_transfer_campaign(
+        self.lead_a.with_user(self.call_center_superuser).action_callcenter_transfer_campaign(
             self.campaign_b.id,
             target_user_id=self.agent_b.id,
             target_profile_id=target_profile.id,
@@ -357,14 +371,14 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
         self.assertEqual(created.create_uid, self.agent_a2)
 
-        for actor in (self.agent_a2, self.supervisor_a, self.service):
+        for actor in (self.agent_a2, self.supervisor_a, self.service, self.requester, self.technical_admin):
             with self.subTest(actor=actor.login):
                 with self.assertRaises(AccessError):
                     created.with_user(actor).write(
                         {"name": f"Forbidden edit by {actor.login}"}
                     )
 
-        created.with_user(self.requester).write(
+        created.with_user(self.call_center_superuser).write(
             {"name": "Super User corrected lead"}
         )
         self.assertEqual(created.name, "Super User corrected lead")
@@ -446,7 +460,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 }
             )
 
-        batch = Batch.with_user(self.requester).create(
+        batch = Batch.with_user(self.call_center_superuser).create(
             {
                 "name": "Synthetic CSV import",
                 "campaign_id": self.campaign_a.id,
@@ -454,7 +468,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "upload_file": payload,
             }
         )
-        batch.with_user(self.requester).action_validate()
+        batch.with_user(self.call_center_superuser).action_validate()
         self.assertEqual(batch.state, "validated")
         self.assertEqual(batch.total_rows, 3)
         self.assertEqual(batch.duplicate_count, 1)
@@ -463,7 +477,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(len(valid_line), 1)
         self.assertTrue(valid_line.cross_campaign_duplicate)
 
-        batch.with_user(self.requester).action_import()
+        batch.with_user(self.call_center_superuser).action_import()
         self.assertEqual(batch.state, "imported")
         self.assertEqual(batch.created_count, 1)
         imported = batch.line_ids.filtered(lambda line: line.status == "imported").lead_id
@@ -472,7 +486,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(imported.queue_state, "available")
         self.assertTrue(imported.cross_campaign_duplicate)
 
-        duplicate_file = Batch.with_user(self.requester).create(
+        duplicate_file = Batch.with_user(self.call_center_superuser).create(
             {
                 "name": "Repeated file",
                 "campaign_id": self.campaign_a.id,
@@ -481,11 +495,11 @@ class TestCampaignCrmWorkspace(TransactionCase):
             }
         )
         with self.assertRaises(UserError):
-            duplicate_file.with_user(self.requester).action_validate()
-        duplicate_file.with_user(self.requester).write(
+            duplicate_file.with_user(self.call_center_superuser).action_validate()
+        duplicate_file.with_user(self.call_center_superuser).write(
             {"override_duplicate_file": True}
         )
-        duplicate_file.with_user(self.requester).action_validate()
+        duplicate_file.with_user(self.call_center_superuser).action_validate()
         self.assertEqual(duplicate_file.state, "validated")
 
     def test_profile_chatter_activity_and_attachment_inherit_campaign_scope(self):

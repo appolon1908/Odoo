@@ -9,12 +9,14 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 
 from .crm_workspace import (
     CRM_TRANSITION_CAPABILITY,
+    CRM_QUEUE_SYSTEM_CAPABILITY,
+    _is_call_center_super_user,
     _is_global_admin,
     _is_operational,
 )
 
 
-QUEUE_SYSTEM_CAPABILITY = object()
+QUEUE_SYSTEM_CAPABILITY = CRM_QUEUE_SYSTEM_CAPABILITY
 ASSIGNMENT_HISTORY_CAPABILITY = object()
 QUEUE_CONTROLLED_FIELDS = {
     "user_id",
@@ -95,7 +97,7 @@ def _priority_value(value):
 
 
 def _require_global_admin(env):
-    if not _is_global_admin(env.user):
+    if not _is_call_center_super_user(env.user):
         raise AccessError(_("Only the Call Center Super User may perform lead imports."))
 
 
@@ -220,16 +222,16 @@ class CrmLeadQueue(models.Model):
     def write(self, values):
         governed = self.filtered("cc_contact_center_record")
         queue_capability = self.env.context.get("_cc_lead_queue_capability")
-        is_global_admin = _is_global_admin(self.env.user)
-        if governed and not is_global_admin:
-            if queue_capability is QUEUE_SYSTEM_CAPABILITY:
+        is_super_user = _is_call_center_super_user(self.env.user)
+        if governed and not is_super_user:
+            if self.env.su and queue_capability is QUEUE_SYSTEM_CAPABILITY:
                 forbidden = set(values) - QUEUE_CONTROLLED_FIELDS
                 if forbidden:
                     raise AccessError(
                         _("The queue service may update only controlled queue fields.")
                     )
             elif (
-                self.env.context.get("_cc_crm_transition_capability")
+                self.env.su and self.env.context.get("_cc_crm_transition_capability")
                 is CRM_TRANSITION_CAPABILITY
             ):
                 forbidden = set(values) - TRANSITION_CONTROLLED_FIELDS
@@ -248,7 +250,7 @@ class CrmLeadQueue(models.Model):
         assignment_before = {}
         track_admin_assignment = (
             bool(governed)
-            and is_global_admin
+            and is_super_user
             and "user_id" in values
             and queue_capability is not QUEUE_SYSTEM_CAPABILITY
         )
@@ -571,7 +573,7 @@ class CrmLeadQueue(models.Model):
         return True
 
     def action_callcenter_release_to_queue(self, reason=False):
-        if not _is_global_admin(self.env.user):
+        if not _is_call_center_super_user(self.env.user):
             raise AccessError(_("Only the Call Center Super User may release leads."))
         for lead in self:
             lead.sudo().with_context(
