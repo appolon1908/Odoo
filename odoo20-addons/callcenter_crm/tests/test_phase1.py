@@ -500,7 +500,6 @@ class TestCallCenterCRMPhase1(TransactionCase):
         lead = self.env["crm.lead"].with_user(self.agent_a1).create({
             "name": "Transfer Working Lead", "phone": "8095551111"
         })
-        self.campaign_a.with_user(self.ops).action_assign_agent(self.agent_b1)
         target.with_user(self.ops).action_assign_agent(self.agent_a1)
 
         lead.invalidate_recordset()
