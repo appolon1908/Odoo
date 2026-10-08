@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_callcenter_campaign_lifecycle_wizard_form" model="ir.ui.view">
+        <field name="name">callcenter.campaign.lifecycle.wizard.form</field>
+        <field name="model">callcenter.campaign.lifecycle.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Campaign Lifecycle">
+                <group>
+                    <field name="campaign_id"/>
+                    <field name="operation"/>
+                    <field name="reason"
+                           invisible="operation == 'duplicate'"
+                           required="operation in ('pause','close','archive')"
+                           placeholder="Required audit reason"/>
+                    <field name="new_code"
+                           invisible="operation != 'duplicate'"
+                           required="operation == 'duplicate'"
+                           placeholder="Example: HINS-2026-11"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object" string="Confirm"
+                            class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
