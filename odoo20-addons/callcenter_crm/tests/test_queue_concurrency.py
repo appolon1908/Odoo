@@ -1,5 +1,3 @@
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from odoo import Command, api, fields
@@ -17,13 +15,17 @@ class TestCallCenterCRMQueueConcurrency(BaseCase):
             env = api.Environment(cr, api.SUPERUSER_ID, {})
             Users = env["res.users"].with_context(no_reset_password=True)
             group_agent = env.ref("callcenter_crm.group_callcenter_agent")
+            group_supervisor = env.ref("callcenter_crm.group_callcenter_supervisor")
             group_superuser = env.ref("callcenter_crm.group_callcenter_superuser")
 
             cls.ops = Users.create({
                 "name": "Concurrent Queue Ops",
                 "login": "concurrent.queue.ops@example.test",
                 "email": "concurrent.queue.ops@example.test",
-                "group_ids": [Command.link(group_superuser.id)],
+                "group_ids": [
+                    Command.link(group_superuser.id),
+                    Command.link(group_supervisor.id),
+                ],
             })
             cls.agent_1 = Users.create({
                 "name": "Concurrent Agent One",
@@ -43,16 +45,10 @@ class TestCallCenterCRMQueueConcurrency(BaseCase):
                 "name": "Concurrent Queue Campaign",
                 "code": "CONCURRENCY-QUEUE-1",
                 "campaign_type": "outbound",
-                "primary_supervisor_id": False,
+                "primary_supervisor_id": cls.ops.id,
                 "start_at": now - timedelta(hours=1),
                 "end_at": now + timedelta(days=1),
             })
-            # Ready requires a primary supervisor. Promote the ops user only for the
-            # campaign-specific supervisor role while preserving its operational
-            # superuser role and no technical-admin implication.
-            group_supervisor = env.ref("callcenter_crm.group_callcenter_supervisor")
-            cls.ops.sudo().write({"group_ids": [Command.link(group_supervisor.id)]})
-            campaign.with_user(cls.ops).write({"primary_supervisor_id": cls.ops.id})
             campaign.with_user(cls.ops).action_assign_agent(cls.agent_1)
             campaign.with_user(cls.ops).action_assign_agent(cls.agent_2)
             campaign.with_user(cls.ops).action_ready()
@@ -77,7 +73,6 @@ class TestCallCenterCRMQueueConcurrency(BaseCase):
             cls.campaign_id = campaign.id
             cls.team_id = campaign.crm_team_id.id
             cls.lead_ids = leads.ids
-            cls.ops_id = cls.ops.id
             cls.agent_ids = [cls.agent_1.id, cls.agent_2.id]
 
     @classmethod
@@ -102,29 +97,26 @@ class TestCallCenterCRMQueueConcurrency(BaseCase):
                 campaign.unlink()
             if team.exists():
                 team.unlink()
-            env["res.users"].browse([cls.ops_id] + cls.agent_ids).unlink()
         super().tearDownClass()
 
-    def test_simultaneous_get_next_lead_never_returns_same_record(self):
-        barrier = threading.Barrier(2)
+    def test_two_open_transactions_get_distinct_next_leads(self):
+        # Transaction 1 claims its lead and remains open, deliberately holding
+        # the selected crm_lead row lock. Transaction 2 then executes the same
+        # public queue action before transaction 1 commits. PostgreSQL
+        # FOR UPDATE SKIP LOCKED must force transaction 2 onto the other lead.
+        with self.registry.cursor() as cr1:
+            env1 = api.Environment(cr1, self.agent_ids[0], {})
+            action_1 = env1["crm.lead"].action_cc_get_next_lead()
+            lead_1 = action_1 and action_1.get("res_id")
+            self.assertTrue(lead_1)
 
-        def claim(user_id):
-            with self.registry.cursor() as cr:
-                env = api.Environment(cr, user_id, {})
-                barrier.wait(timeout=10)
-                action = env["crm.lead"].action_cc_get_next_lead()
-                return action and action.get("res_id")
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_1 = executor.submit(claim, self.agent_ids[0])
-            future_2 = executor.submit(claim, self.agent_ids[1])
-            lead_1 = future_1.result(timeout=15)
-            lead_2 = future_2.result(timeout=15)
-
-        self.assertTrue(lead_1)
-        self.assertTrue(lead_2)
-        self.assertNotEqual(lead_1, lead_2)
-        self.assertEqual({lead_1, lead_2}, set(self.lead_ids))
+            with self.registry.cursor() as cr2:
+                env2 = api.Environment(cr2, self.agent_ids[1], {})
+                action_2 = env2["crm.lead"].action_cc_get_next_lead()
+                lead_2 = action_2 and action_2.get("res_id")
+                self.assertTrue(lead_2)
+                self.assertNotEqual(lead_1, lead_2)
+                self.assertEqual({lead_1, lead_2}, set(self.lead_ids))
 
         with self.registry.cursor() as cr:
             env = api.Environment(cr, api.SUPERUSER_ID, {})
