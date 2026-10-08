@@ -1,0 +1,106 @@
+name: Codestra Hierarchy Governance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hierarchy-governance:
+    name: hierarchy-governance
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact source head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate Odoo control-plane manifest
+        shell: python
+        run: |
+          import json
+          import pathlib
+
+          path = pathlib.Path(".codestra/control-plane.yml")
+          if not path.is_file():
+              raise SystemExit("missing .codestra/control-plane.yml")
+
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if data.get("version") != 1:
+              raise SystemExit("unsupported control-plane manifest version")
+          if data.get("product") != "Codestra Odoo 20 CRM":
+              raise SystemExit("unexpected product authority")
+
+          promotion = data.get("promotion", {})
+          if promotion.get("chain") != ["development", "testing", "staging", "production"]:
+              raise SystemExit("invalid promotion chain")
+          for key in ("require_exact_sha", "require_clean_worktree", "require_review"):
+              if promotion.get(key) is not True:
+                  raise SystemExit(f"{key} must remain true")
+          if promotion.get("force_push_allowed") is not False:
+              raise SystemExit("force pushes must remain disabled")
+
+          effects = data.get("effects", {})
+          for key in ("production_go", "live_capabilities_enabled", "external_effects_enabled"):
+              if effects.get(key) is not False:
+                  raise SystemExit(f"{key} must remain false")
+
+          authority = data.get("authority", {})
+          expected_authority = {
+              "development_branch": "development",
+              "testing_branch": "testing",
+              "staging_branch": "staging",
+              "production_branch": "production",
+          }
+          for key, expected in expected_authority.items():
+              if authority.get(key) != expected:
+                  raise SystemExit(f"{key} must be {expected}")
+
+          sections = data.get("sections", [])
+          if len(sections) != 8:
+              raise SystemExit("expected exactly 8 governed Odoo workstations")
+          branches = {section.get("branch") for section in sections}
+          for number in range(1, 9):
+              prefix = f"workstation/ws0{number}-"
+              if not any(branch and branch.startswith(prefix) for branch in branches):
+                  raise SystemExit(f"missing workstation prefix {prefix}")
+
+          required_paths = [
+              pathlib.Path("odoo20-addons/callcenter_crm/__manifest__.py"),
+              pathlib.Path(".github/workflows/odoo20-callcenter-ci.yml"),
+              pathlib.Path("scripts/run_odoo20_callcenter_tests.sh"),
+              pathlib.Path("deploy/compose/compose.server3.odoo20.yaml"),
+          ]
+          missing = [str(p) for p in required_paths if not p.is_file()]
+          if missing:
+              raise SystemExit("missing governed Odoo 20 paths: " + ", ".join(missing))
+
+          print("Odoo control-plane governance PASS")
+
+  codestra-control-plane:
+    name: codestra-control-plane
+    needs: hierarchy-governance
+    runs-on: ubuntu-24.04
+    if: ${{ always() }}
+    steps:
+      - name: Preserve required control-plane context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.hierarchy-governance.result }}" = "success"
+
+  codestra-slash-control-plane:
+    name: codestra/control-plane
+    needs: hierarchy-governance
+    runs-on: ubuntu-24.04
+    if: ${{ always() }}
+    steps:
+      - name: Preserve legacy required control-plane context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.hierarchy-governance.result }}" = "success"
