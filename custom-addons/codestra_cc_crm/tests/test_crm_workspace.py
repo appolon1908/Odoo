@@ -124,6 +124,8 @@ class TestCampaignCrmWorkspace(TransactionCase):
             {
                 "name": "Campaign A unassigned lead",
                 "campaign_id": cls.campaign_a.id,
+                "user_id": False,
+                "queue_state": "available",
                 "cc_source_list_key": "synthetic-unassigned-a",
             }
         )

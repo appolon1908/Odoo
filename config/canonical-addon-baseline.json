@@ -293,7 +293,7 @@
   "additional_strict_overrides": {
     "codestra_cc_crm": {
       "base_tree": "196b1631510c711f1118cb8812288c6e6e6b30ac",
-      "current_tree": "0ffca945fb17755b7a76dc3e85fa139ceefea02f",
+      "current_tree": "917ae426f7cf9a65c2877ab4d95f908eb3db5163",
       "integration_boundary_exceptions": [
         {
           "kind": "odoo_cursor_locking",

@@ -268,9 +268,17 @@ class TestCampaignSecurity(TransactionCase):
             "code": "SCOPE-NEGATIVE-OTHER",
             "company_id": self.env.company.id,
         })
-        canonical_other = self.env["cc.business.unit"].create({
-            "legacy_business_unit_id": legacy_other.id,
-        })
+        # The canonical auto-adoption hook may have wrapped this legacy unit
+        # already. Reuse that wrapper instead of creating a duplicate.
+        Canonical = self.env["cc.business.unit"].with_context(active_test=False)
+        canonical_other = Canonical.search([
+            ("legacy_business_unit_id", "=", legacy_other.id)
+        ], limit=1)
+        if not canonical_other:
+            canonical_other = Canonical.create({
+                "legacy_business_unit_id": legacy_other.id,
+            })
+        self.assertEqual(canonical_other.legacy_business_unit_id, legacy_other)
         for user in (self.agent, self.supervisor, self.qa_analyst):
             self.assertFalse(
                 self.env["cc.business.unit"].with_user(user).search(
