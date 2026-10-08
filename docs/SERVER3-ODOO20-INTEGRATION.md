@@ -68,6 +68,14 @@ Before promotion, run the repository certification gate:
 bash scripts/run_odoo20_callcenter_tests.sh
 ```
 
+After installing the exact reviewed SHA in staging, run the separate-account UAT:
+
+```bash
+CALLCENTER_UAT_CONFIRM=YES bash scripts/run_odoo20_callcenter_staging_uat.sh
+```
+
+See `docs/CALLCENTER-PHASE1-UAT.md` for acceptance checks and evidence.
+
 ## Development-to-server synchronization
 
 Development happens on `10.0.0.217`. Changes go to a feature branch and PR first. After merge to `development`, Server 3 fetches and checks out the exact reviewed SHA. The server checkout is a deployment consumer, not an authoring workstation.
