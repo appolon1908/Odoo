@@ -220,36 +220,10 @@ class CrmLead(models.Model):
         if not callcenter_records:
             return super().write(vals)
 
-        is_superuser = self._cc_is_superuser()
-        is_supervisor = (
-            not is_superuser
-            and self.env.user.has_group("callcenter_crm.group_callcenter_supervisor")
-        )
-        is_agent = (
-            not is_superuser
-            and not is_supervisor
-            and self.env.user.has_group("callcenter_crm.group_callcenter_agent")
-        )
-        if not is_superuser:
-            if not (is_agent or is_supervisor):
-                raise AccessError(_("Call-center lead changes require an operational call-center role."))
-            if any(
-                not lead.cc_campaign_id.active or lead.cc_campaign_id.state != "active"
-                for lead in callcenter_records
-            ):
-                raise AccessError(_("Paused, Closed, and archived campaign leads are historical and read-only."))
-
-            protected = {
-                "cc_campaign_id", "team_id", "source_batch_id", "cc_phone_key",
-                "cc_email_key", "cross_campaign_duplicate", "queue_state",
-                "next_eligible_at", "call_attempt_count", "last_call_at",
-            }
-            if protected.intersection(vals):
-                raise AccessError(_("Operational users cannot change protected campaign/queue fields."))
-            if is_agent and {"user_id", "active"}.intersection(vals):
-                raise AccessError(_("Agents cannot reassign or archive call-center leads."))
-            if is_supervisor and "active" in vals and vals["active"] is not False:
-                raise AccessError(_("Only the Call Center Super User may restore archived leads."))
+        if not self._cc_is_superuser():
+            raise AccessError(
+                _("Saved call-center leads may only be edited by a Call Center Super User.")
+            )
 
         identity_fields = {
             "cc_campaign_id", "phone", "mobile", "email_from",
@@ -268,8 +242,10 @@ class CrmLead(models.Model):
             campaign = self.env["callcenter.campaign"].sudo().browse(campaign_id).exists()
             if not campaign:
                 raise ValidationError(_("The selected call-center campaign does not exist."))
-            if (campaign.state == "closed" or not campaign.active) and not self.env.is_superuser():
-                raise AccessError(_("Closed or archived campaign leads are historical and read-only."))
+            if campaign.state == "closed" or not campaign.active:
+                raise AccessError(
+                    _("Closed or archived campaign leads are historical and read-only.")
+                )
             vals["team_id"] = campaign.crm_team_id.id
 
             phone = vals.get("phone", lead.phone)
@@ -295,7 +271,9 @@ class CrmLead(models.Model):
             target_user_id = vals.get("user_id", lead.user_id.id)
             if target_user_id:
                 if campaign.state != "active":
-                    raise AccessError(_("Lead assignment is available only while the campaign is Active."))
+                    raise AccessError(
+                        _("Lead assignment is available only while the campaign is Active.")
+                    )
                 assigned = self.env["callcenter.campaign.assignment"].sudo().search_count([
                     ("campaign_id", "=", campaign_id),
                     ("user_id", "=", target_user_id),
@@ -303,27 +281,21 @@ class CrmLead(models.Model):
                     ("active", "=", True),
                 ])
                 if not assigned:
-                    raise ValidationError(_("Assigned agents must have an active assignment to the lead campaign."))
+                    raise ValidationError(
+                        _("Assigned agents must have an active assignment to the lead campaign.")
+                    )
             break
 
-        result = (
-            super(CrmLead, self.sudo()).write(vals)
-            if is_superuser
-            else super().write(vals)
-        )
+        result = super(CrmLead, self.sudo()).write(vals)
         if "user_id" in vals or "cc_campaign_id" in vals:
-            source = "admin" if is_superuser else "supervisor"
-            reason = (
-                _("Call Center Super User reassignment")
-                if is_superuser
-                else _("Supervisor same-campaign reassignment")
-            )
             for lead in self:
                 if (
                     old_users.get(lead.id) != lead.user_id.id
                     or old_campaigns.get(lead.id) != lead.cc_campaign_id.id
                 ):
-                    lead._cc_sync_assignment_history(source, reason)
+                    lead._cc_sync_assignment_history(
+                        "admin", _("Call Center Super User reassignment")
+                    )
         return result
 
     def unlink(self):

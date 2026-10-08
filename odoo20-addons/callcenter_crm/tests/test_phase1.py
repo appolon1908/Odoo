@@ -110,31 +110,31 @@ class TestCallCenterCRMPhase1(TransactionCase):
         supervisor = self.env["crm.lead"].with_user(self.sup_a).search([("id", "=", own.id)])
         self.assertEqual(supervisor, own)
 
-    def test_05_safe_lead_edits_reassignment_delete_export_and_archive(self):
+    def test_05_saved_lead_lock_reassignment_delete_export_and_archive(self):
         lead = self.env["crm.lead"].with_user(self.agent_a1).create({
-            "name": "Editable Lead", "phone": "8095550103"
+            "name": "Locked Lead", "phone": "8095550103"
         })
-        lead.with_user(self.agent_a1).write({"name": "Agent Edit"})
-        self.assertEqual(lead.name, "Agent Edit")
+        with self.assertRaises(AccessError):
+            lead.with_user(self.agent_a1).write({"name": "Agent Edit"})
         with self.assertRaises(AccessError):
             lead.with_user(self.agent_a1).write({"user_id": self.agent_a2.id})
-
-        lead.with_user(self.sup_a).write({"name": "Supervisor Edit"})
-        lead.with_user(self.sup_a).write({"user_id": self.agent_a2.id})
-        self.assertEqual(lead.user_id, self.agent_a2)
-
         with self.assertRaises(AccessError):
-            lead.with_user(self.agent_a2).export_data(["name", "phone"])
+            lead.with_user(self.sup_a).write({"name": "Supervisor Edit"})
+        with self.assertRaises(AccessError):
+            lead.with_user(self.sup_a).write({"user_id": self.agent_a2.id})
+        with self.assertRaises(AccessError):
+            lead.with_user(self.agent_a1).export_data(["name", "phone"])
         with self.assertRaises(AccessError):
             lead.with_user(self.sup_a).export_data(["name", "phone"])
         with self.assertRaises(AccessError):
             lead.with_user(self.ops).unlink()
 
-        lead.with_user(self.sup_a).write({"active": False})
-        self.assertFalse(lead.active)
-        lead.with_user(self.ops).write({"active": True, "name": "Admin Edit"})
-        self.assertTrue(lead.active)
+        lead.with_user(self.ops).write({"name": "Admin Edit"})
         self.assertEqual(lead.name, "Admin Edit")
+        lead.with_user(self.ops).write({"active": False})
+        self.assertFalse(lead.active)
+        lead.with_user(self.ops).write({"active": True})
+        self.assertTrue(lead.active)
 
     def test_06_generic_import_is_blocked_for_agent(self):
         with self.assertRaises(AccessError):
@@ -310,15 +310,15 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertEqual(wizard.batch_id.total_rows, 1)
         self.assertEqual(wizard.batch_id.error_count, 0)
 
-    def test_16_supervisor_create_is_unassigned_and_editable_in_scope(self):
+    def test_16_supervisor_create_is_unassigned_then_locked(self):
         lead = self.env["crm.lead"].with_user(self.sup_a).create({
             "name": "Supervisor Lead", "phone": "8095550700",
             "cc_campaign_id": self.campaign_a.id,
         })
         self.assertFalse(lead.user_id)
         self.assertEqual(lead.queue_state, "available")
-        lead.with_user(self.sup_a).write({"name": "Supervisor Edited"})
-        self.assertEqual(lead.name, "Supervisor Edited")
+        with self.assertRaises(AccessError):
+            lead.with_user(self.sup_a).write({"name": "Supervisor Edited"})
         with self.assertRaises(AccessError):
             lead.with_user(self.sup_a).write({"cc_campaign_id": self.campaign_b.id})
 
