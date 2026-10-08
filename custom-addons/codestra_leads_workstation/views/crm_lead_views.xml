@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="crm_lead_form_leads_workstation" model="ir.ui.view">
+    <field name="name">crm.lead.form.leads.workstation</field>
+    <field name="model">crm.lead</field>
+    <field name="inherit_id" ref="crm.crm_lead_view_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//sheet/notebook" position="inside">
+        <page string="Leads Workstation" groups="base.group_system">
+          <group>
+            <field name="codestra_leads_id"/>
+            <field name="codestra_leads_version"/>
+            <field name="codestra_leads_status"/>
+            <field name="codestra_leads_campaign_id"/>
+            <field name="codestra_leads_verification_status"/>
+            <field name="codestra_leads_suppressed"/>
+            <field name="codestra_leads_do_not_contact"/>
+            <field name="codestra_leads_last_sync_at"/>
+          </group>
+        </page>
+      </xpath>
+    </field>
+  </record>
+</odoo>
