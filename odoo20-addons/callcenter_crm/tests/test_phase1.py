@@ -142,6 +142,59 @@ class TestCallCenterCRMPhase1(TransactionCase):
         lead.with_user(self.ops).write({"active": True})
         self.assertTrue(lead.active)
 
+    def test_revoked_assignment_cannot_read_campaign_data_even_with_inactive_context(self):
+        """Historical membership must not authorize current CRM or campaign reads."""
+        lead = self.env["crm.lead"].with_user(self.agent_a1).create({
+            "name": "Revocation probe", "phone": "8095557711",
+        })
+        self.assertEqual(
+            self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead.id)]),
+            lead,
+        )
+        assignment = self.env["callcenter.campaign.assignment"].sudo().search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.agent_a1.id),
+            ("role", "=", "agent"),
+            ("active", "=", True),
+        ], limit=1)
+        self.assertTrue(assignment)
+        assignment.with_user(self.ops).action_close()
+        self.assertFalse(assignment.history_readable)
+        self.assertFalse(assignment.read_authorized)
+        for model, record_id in (
+            ("crm.lead", lead.id),
+            ("callcenter.campaign", self.campaign_a.id),
+            ("crm.team", self.campaign_a.crm_team_id.id),
+        ):
+            scoped = self.env[model].with_user(self.agent_a1).with_context(active_test=False)
+            self.assertFalse(
+                scoped.search([("id", "=", record_id)]),
+                "Revoked assignment must not expose " + model,
+            )
+
+    def test_bulk_write_checks_each_campaign_and_rejects_mixed_leads(self):
+        first = self._lead(self.campaign_a, "8095557721")
+        second = self._lead(self.campaign_b, "8095557722")
+        unrelated = self.env["crm.lead"].sudo().create({
+            "name": "Ordinary CRM record for mixed-write check",
+        })
+        original_team_a = first.team_id
+        original_team_b = second.team_id
+        self.assertNotEqual(original_team_a, original_team_b)
+
+        with self.assertRaises(AccessError):
+            (first | unrelated).with_user(self.ops).write({
+                "name": "Forbidden mixed edit",
+            })
+        self.assertNotEqual(first.name, "Forbidden mixed edit")
+        self.assertNotEqual(unrelated.name, "Forbidden mixed edit")
+
+        (first | second).with_user(self.ops).write({"name": "Individually verified"})
+        self.assertEqual(first.team_id, original_team_a)
+        self.assertEqual(second.team_id, original_team_b)
+        self.assertEqual(first.name, "Individually verified")
+        self.assertEqual(second.name, "Individually verified")
+
     def test_06_generic_import_is_blocked_for_agent(self):
         with self.assertRaises(AccessError):
             self.env["crm.lead"].with_user(self.agent_a1).load(
@@ -441,6 +494,16 @@ class TestCallCenterCRMPhase1(TransactionCase):
         with self.assertRaises(AccessError):
             lead.with_user(self.sup_a).write({"name": "No paused supervisor edit"})
         self.campaign_a.with_user(self.ops).action_close("Campaign complete")
+        history_assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(
+            active_test=False,
+        ).search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.agent_a1.id),
+            ("role", "=", "agent"),
+        ], limit=1)
+        self.assertFalse(history_assignment.active)
+        self.assertTrue(history_assignment.history_readable)
+        self.assertTrue(history_assignment.read_authorized)
         self.assertEqual(
             self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead.id)]),
             lead,

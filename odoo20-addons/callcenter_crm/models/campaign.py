@@ -368,9 +368,11 @@ class CallCenterCampaign(models.Model):
                 "reason": str(reason or "").strip() or False,
             })
             if to_state == "closed":
-                campaign.assignment_ids.filtered(
+                closing_staff = campaign.assignment_ids.filtered(
                     lambda a: a.active and a.role in {"agent", "supervisor"}
-                ).sudo().action_close(now)
+                ).sudo()
+                closing_staff._mark_closed_history_readable()
+                closing_staff.action_close(now)
         return True
 
     def action_ready(self):

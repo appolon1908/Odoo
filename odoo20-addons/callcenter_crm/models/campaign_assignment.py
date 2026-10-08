@@ -20,7 +20,21 @@ class CallCenterCampaignAssignment(models.Model):
     )
     is_primary = fields.Boolean(default=False, index=True)
     active = fields.Boolean(default=True, index=True)
+    # Explicit revocation denies read access; campaign closure retains only
+    # historical read permission for assignments closed by that lifecycle.
+    history_readable = fields.Boolean(default=False, copy=False, readonly=True)
+    read_authorized = fields.Boolean(
+        compute="_compute_read_authorized", store=True, readonly=True, index=True,
+    )
     date_from = fields.Datetime(required=True, default=fields.Datetime.now, index=True)
+
+    @api.depends("active", "history_readable")
+    def _compute_read_authorized(self):
+        for assignment in self:
+            assignment.read_authorized = bool(
+                assignment.active or assignment.history_readable
+            )
+
     date_to = fields.Datetime(index=True)
     assigned_by_id = fields.Many2one(
         "res.users", required=True, readonly=True, ondelete="restrict",
@@ -54,6 +68,11 @@ class CallCenterCampaignAssignment(models.Model):
     def create(self, vals_list):
         if not self._can_manage():
             raise AccessError(_("Only call-center administration may create campaign assignments."))
+        if any(
+            "history_readable" in vals or "read_authorized" in vals
+            for vals in vals_list
+        ):
+            raise AccessError(_("Historical read authority is set only by campaign closure."))
         for vals in vals_list:
             role = vals.get("role")
             if role == "agent":
@@ -80,6 +99,8 @@ class CallCenterCampaignAssignment(models.Model):
     def write(self, vals):
         if not self._can_manage():
             raise AccessError(_("Only call-center administration may modify campaign assignments."))
+        if {"history_readable", "read_authorized"}.intersection(vals):
+            raise AccessError(_("Historical read authority is not directly editable."))
         if "role" in vals and vals["role"] == "agent":
             vals["is_primary"] = True
         was_active_agents = self.filtered(lambda r: r.active and r.role == "agent")
@@ -143,6 +164,21 @@ class CallCenterCampaignAssignment(models.Model):
                     Member.create({"crm_team_id": team.id, "user_id": assignment.user_id.id})
             elif membership and membership.active:
                 membership.write({"active": False})
+
+    def _mark_closed_history_readable(self):
+        """Only a terminal campaign closure may preserve historical read access."""
+        if not self.env.is_superuser():
+            raise AccessError(_("Historical access transition is an internal operation."))
+        for assignment in self:
+            if (
+                assignment.campaign_id.state != "closed"
+                or not assignment.active
+                or assignment.role not in {"agent", "supervisor"}
+            ):
+                raise AccessError(_("Only closing campaign staff receive historical read access."))
+        return super(CallCenterCampaignAssignment, self.sudo()).write({
+            "history_readable": True,
+        })
 
     def action_close(self, date_to=None):
         if not self._can_manage():
