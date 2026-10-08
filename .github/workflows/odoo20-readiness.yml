@@ -1,0 +1,39 @@
+name: Odoo 20 migration inventory (not promotion)
+on:
+  pull_request:
+    paths:
+      - 'scripts/odoo20/**'
+      - 'tests/odoo20/**'
+      - 'deploy/compose/compose.odoo20.certification.yaml'
+      - 'docs/authority/ODOO20_COMMUNITY_MIGRATION.md'
+  workflow_dispatch:
+    inputs:
+      enforce_manifest_port:
+        description: 'Require all addon manifests to be ported (promotion precondition)'
+        required: true
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  inventory:
+    name: Odoo 20 source inventory (no runtime certification)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Static scanner tests
+        run: python3 -m unittest discover -s tests/odoo20 -p 'test_*.py' -v
+      - name: Produce complete migration inventory
+        run: python3 scripts/odoo20/inventory.py --output "$RUNNER_TEMP/odoo20-inventory.json"
+      - name: Enforce manifest-only precondition if explicitly requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.enforce_manifest_port }}
+        run: python3 scripts/odoo20/inventory.py --require-ready
+      - uses: actions/upload-artifact@ea6df5f5df59e478d4c3c823efb8d13dd25d46a8 # v4.6.2
+        with:
+          name: odoo20-addon-inventory
+          path: ${{ runner.temp }}/odoo20-inventory.json
