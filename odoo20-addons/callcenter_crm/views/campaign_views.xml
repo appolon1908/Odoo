@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_callcenter_campaign_list" model="ir.ui.view">
+        <field name="name">callcenter.campaign.list</field>
+        <field name="model">callcenter.campaign</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="code"/>
+                <field name="name"/>
+                <field name="campaign_type"/>
+                <field name="state"/>
+                <field name="primary_supervisor_id"/>
+                <field name="agent_count"/>
+                <field name="lead_count"/>
+                <field name="available_lead_count"/>
+                <field name="start_at"/>
+                <field name="end_at"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_callcenter_campaign_form" model="ir.ui.view">
+        <field name="name">callcenter.campaign.form</field>
+        <field name="model">callcenter.campaign</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_ready" type="object" string="Ready" invisible="state != 'draft'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_back_to_draft" type="object" string="Back to Draft" invisible="state != 'ready'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_activate" type="object" string="Activate" invisible="state != 'ready'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_pause_wizard" type="object" string="Pause" invisible="state != 'active'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_resume" type="object" string="Resume" invisible="state != 'paused'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_close_wizard" type="object" string="Close" invisible="state not in ('active','paused')" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_archive_wizard" type="object" string="Archive" invisible="state != 'closed' or not active" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <button name="action_open_duplicate_wizard" type="object" string="Duplicate as Draft" invisible="state != 'closed'" groups="callcenter_crm.group_callcenter_superuser"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,ready,active,paused,closed"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="campaign_type"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="client_id"/>
+                        </group>
+                        <group>
+                            <field name="primary_supervisor_id"/>
+                            <field name="backup_supervisor_ids" widget="many2many_tags"/>
+                            <field name="start_at"/>
+                            <field name="end_at"/>
+                            <field name="crm_team_id" readonly="1"/>
+                            <field name="active" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Dashboard">
+                        <field name="agent_count" readonly="1"/>
+                        <field name="lead_count" readonly="1"/>
+                        <field name="available_lead_count" readonly="1"/>
+                        <field name="assigned_lead_count" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Assignments">
+                            <field name="assignment_ids" readonly="1">
+                                <list create="false" edit="false" delete="false">
+                                    <field name="user_id"/>
+                                    <field name="role"/>
+                                    <field name="is_primary"/>
+                                    <field name="date_from"/>
+                                    <field name="date_to"/>
+                                    <field name="active"/>
+                                    <field name="assigned_by_id"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="State History">
+                            <field name="state_log_ids" readonly="1">
+                                <list create="false" edit="false" delete="false">
+                                    <field name="from_state"/>
+                                    <field name="to_state"/>
+                                    <field name="changed_by_id"/>
+                                    <field name="changed_at"/>
+                                    <field name="reason"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Description"><field name="description"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_callcenter_campaign_search" model="ir.ui.view">
+        <field name="name">callcenter.campaign.search</field>
+        <field name="model">callcenter.campaign</field>
+        <field name="arch" type="xml">
+            <search string="Call Center Campaigns">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="state"/>
+                <field name="campaign_type"/>
+                <field name="primary_supervisor_id"/>
+                <field name="client_id"/>
+                <filter name="active_campaigns" string="Active" domain="[('state','=','active'),('active','=',True)]"/>
+                <filter name="paused_campaigns" string="Paused" domain="[('state','=','paused'),('active','=',True)]"/>
+                <filter name="closed_campaigns" string="Closed / Archived" domain="[('state','=','closed')]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_callcenter_campaigns" model="ir.actions.act_window">
+        <field name="name">Campaigns</field>
+        <field name="res_model">callcenter.campaign</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_callcenter_campaign_search"/>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <record id="action_callcenter_assignments" model="ir.actions.act_window">
+        <field name="name">Campaign Assignments</field>
+        <field name="res_model">callcenter.campaign.assignment</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <record id="action_callcenter_state_audit" model="ir.actions.act_window">
+        <field name="name">Campaign Audit</field>
+        <field name="res_model">callcenter.campaign.state.log</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

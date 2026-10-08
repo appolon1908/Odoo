@@ -1,6 +1,7 @@
 version: 1
 hierarchy: [atomic_task, subsection, section, development, testing, staging, production]
 allowed_promotions:
+  atomic_task: subsection
   subsection: section
   section: development
   development: testing

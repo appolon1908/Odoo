@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "product": "Codestra Odoo 20 CRM",
+  "authority": {
+    "development_branch": "development",
+    "testing_branch": "testing",
+    "staging_branch": "staging",
+    "production_branch": "production",
+    "governance_branch": "workstation/governance-control-plane",
+    "ci_runner_label": "odoo20-callcenter"
+  },
+  "promotion": {
+    "chain": ["development", "testing", "staging", "production"],
+    "require_exact_sha": true,
+    "require_clean_worktree": true,
+    "require_review": true,
+    "force_push_allowed": false
+  },
+  "effects": {
+    "production_go": false,
+    "live_capabilities_enabled": false,
+    "external_effects_enabled": false
+  },
+  "sections": [
+    {"id":"ws01-core","name":"Odoo 20 Core & Addon Foundation","branch":"workstation/ws01-core","status":"available"},
+    {"id":"ws02-security","name":"Roles, ACLs & Campaign Isolation","branch":"workstation/ws02-security","status":"available"},
+    {"id":"ws03-campaigns","name":"Campaign Lifecycle & History","branch":"workstation/ws03-campaigns","status":"available"},
+    {"id":"ws04-leads","name":"Lead Locking & CRM Boundaries","branch":"workstation/ws04-leads","status":"available"},
+    {"id":"ws05-imports","name":"Controlled Imports & Duplicate Protection","branch":"workstation/ws05-imports","status":"available"},
+    {"id":"ws06-queue","name":"Queue Distribution & Concurrency","branch":"workstation/ws06-queue","status":"available"},
+    {"id":"ws07-testing","name":"Testing, UAT & Certification","branch":"workstation/ws07-testing","status":"available"},
+    {"id":"ws08-release","name":"Release, Promotion & Server 3 Staging","branch":"workstation/ws08-release","status":"available"}
+  ]
+}
