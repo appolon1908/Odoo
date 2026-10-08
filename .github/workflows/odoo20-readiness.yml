@@ -33,7 +33,7 @@ jobs:
       - name: Enforce manifest-only precondition if explicitly requested
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.enforce_manifest_port }}
         run: python3 scripts/odoo20/inventory.py --require-ready
-      - uses: actions/upload-artifact@ea6df5f5df59e478d4c3c823efb8d13dd25d46a8 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: odoo20-addon-inventory
           path: ${{ runner.temp }}/odoo20-inventory.json
