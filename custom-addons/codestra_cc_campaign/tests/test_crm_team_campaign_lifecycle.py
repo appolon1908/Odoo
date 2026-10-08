@@ -106,6 +106,7 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
         assignment.with_user(self.superuser).action_end_assignment()
         self.assertFalse(assignment.active)
         self.assertTrue(assignment.date_to)
+        self.assertGreater(assignment.date_to, assignment.date_from)
         self.assertFalse(native.active)
         self.assertNotIn(self.agent_a, campaign.member_ids)
         with self.assertRaises(AccessError):
@@ -230,10 +231,15 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
                 "team_id": campaign.id,
             }
         )
-        call = self.env["codestra.vicidial.call"].with_user(self.superuser).create(
+        # Call reservation creation belongs to the telephony service, not
+        # to the operational Call Center Super User's general ORM ACL.
+        call = self.env["codestra.vicidial.call"].sudo().create(
             {
                 "name": "Allowed active campaign call",
-                "lead_id": lead.id,
+                "uniqueid": "campaign-active-call-test",
+                "crm_lead_id": lead.id,
+                "duration_seconds": 0,
+                "billable_seconds": 0,
             }
         )
         self.assertTrue(call)
@@ -241,10 +247,13 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
             "Temporary stop"
         )
         with self.assertRaises(AccessError):
-            self.env["codestra.vicidial.call"].with_user(self.superuser).create(
+            self.env["codestra.vicidial.call"].sudo().create(
                 {
                     "name": "Blocked paused campaign call",
-                    "lead_id": lead.id,
+                    "uniqueid": "campaign-paused-call-test",
+                    "crm_lead_id": lead.id,
+                    "duration_seconds": 0,
+                    "billable_seconds": 0,
                 }
             )
 

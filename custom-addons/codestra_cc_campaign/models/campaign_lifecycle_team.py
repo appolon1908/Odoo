@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
@@ -531,9 +532,13 @@ class CrmTeamCallCenterCampaign(models.Model):
         for team in self:
             active_assignments = team.campaign_assignment_ids.filtered("active")
             if active_assignments:
-                active_assignments.with_context(
-                    _callcenter_assignment_capability=CALLCENTER_ASSIGNMENT_CAPABILITY
-                ).write({"active": False, "date_to": now})
+                # Odoo stores membership dates with second precision. A
+                # same-second close must remain strictly after its start.
+                for assignment in active_assignments:
+                    end_at = max(now, assignment.date_from + timedelta(seconds=1))
+                    assignment.with_context(
+                        _callcenter_assignment_capability=CALLCENTER_ASSIGNMENT_CAPABILITY
+                    ).write({"active": False, "date_to": end_at})
             if team.cc_campaign_id:
                 memberships = self.env["cc.campaign.membership"].search(
                     [
@@ -828,7 +833,14 @@ class CallCenterCampaignAssignment(models.Model):
 
     def action_end_assignment(self):
         self._require_superuser()
-        return self.write({"active": False, "date_to": fields.Datetime.now()})
+        for assignment in self:
+            if not assignment.active:
+                raise AccessError(_("Historical assignments cannot be ended again."))
+            end_at = max(
+                fields.Datetime.now(), assignment.date_from + timedelta(seconds=1)
+            )
+            assignment.write({"active": False, "date_to": end_at})
+        return True
 
 
 class CrmTeamMemberCallCenterGuard(models.Model):
@@ -962,6 +974,10 @@ class CrmLeadCallCenterLifecycleGate(models.Model):
                     values["team_id"] = team.id
 
             if team and team.is_callcenter_campaign:
+                # Canonical campaign leads are never assigned via Odoo's
+                # salesperson default. Only governed assignment logic may
+                # select an agent after the campaign becomes active.
+                values.setdefault("user_id", False)
                 if team.campaign_state == "closed" or not team.active:
                     raise AccessError(
                         _("Closed or archived campaigns cannot receive new leads.")
