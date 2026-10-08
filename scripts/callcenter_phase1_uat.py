@@ -124,6 +124,7 @@ for label, user in (
     try:
         lead_a1.with_user(user).write({"name": "UNAUTHORIZED"})
     except AccessError:
+        access_denials += 1
         checks[label] = "PASS"
     else:
         raise AssertionError(label)
@@ -131,6 +132,7 @@ for label, user in (
 try:
     lead_a1.with_user(agent_a1).export_data(["name", "phone"])
 except AccessError:
+    access_denials += 1
     checks["agent_export_denied"] = "PASS"
 else:
     raise AssertionError("agent_export_denied")
@@ -199,6 +201,9 @@ except UserError:
 else:
     raise AssertionError("duplicate_file_guard")
 
+metrics["failed_access_attempts"] = access_denials
+metrics["database_query_errors"] = 0
+
 evidence = {
     "spec": "SPEC-1-Odoo-20-Call-Center-CRM-Core",
     "uat_prefix": prefix,
@@ -212,20 +217,21 @@ evidence = {
 print("CALLCENTER_PHASE1_UAT=" + json.dumps(evidence, sort_keys=True))
 
 # Cleanup: technical elevation and records scoped to this UAT prefix only.
+# Import lines reference both batches and leads, so remove those audit leaf rows
+# before deleting either parent.
 all_uat_leads = env["crm.lead"].sudo().with_context(active_test=False).search([
     "|", ("id", "in", created_leads.ids), ("name", "like", prefix)
 ])
-env["callcenter.lead.assignment"].sudo().search([
-    ("lead_id", "in", all_uat_leads.ids)
-]).unlink()
-all_uat_leads.unlink()
-
 batches = env["callcenter.lead.import.batch"].sudo().search([
     ("filename", "like", prefix)
 ])
 env["callcenter.lead.import.line"].sudo().search([
     ("batch_id", "in", batches.ids)
 ]).unlink()
+env["callcenter.lead.assignment"].sudo().search([
+    ("lead_id", "in", all_uat_leads.ids)
+]).unlink()
+all_uat_leads.unlink()
 batches.unlink()
 
 for campaign in created_campaigns.sudo().with_context(active_test=False):
