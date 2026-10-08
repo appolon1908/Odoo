@@ -476,6 +476,7 @@ class CrmLead(models.Model):
         if (
             _is_operational(self.env.user)
             and not _is_supervisor(self.env.user)
+            and not queue_operation
             and reassignment_fields.intersection(values)
         ):
             raise AccessError(_("Agents cannot reassign campaign CRM ownership."))
