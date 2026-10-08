@@ -248,7 +248,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertEqual(required_role(self.env["crm.lead"].with_user(self.agent_a1).env), "agent")
         routes = (CallCenterReadAPI.overview, CallCenterReadAPI.campaigns, CallCenterReadAPI.leads)
         for method in routes:
-            routing = getattr(method, "routing")
+            routing = method.original_routing
             self.assertEqual(routing["auth"], "bearer")
             self.assertEqual(routing["bearer_scope"], "codestra-crm-read")
             self.assertEqual(routing["methods"], ["GET"])
