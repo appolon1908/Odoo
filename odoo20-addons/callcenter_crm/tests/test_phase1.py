@@ -33,6 +33,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         cls.agent_a1 = user("agent.a1", cls.group_agent)
         cls.agent_a2 = user("agent.a2", cls.group_agent)
         cls.agent_b1 = user("agent.b1", cls.group_agent)
+        cls.agent_b2 = user("agent.b2", cls.group_agent)
         cls.sales_manager = user("sales.manager", cls.group_sales_manager)
 
         now = fields.Datetime.now()
@@ -56,6 +57,7 @@ class TestCallCenterCRMPhase1(TransactionCase):
         cls.campaign_a.with_user(cls.ops).action_assign_agent(cls.agent_a1)
         cls.campaign_a.with_user(cls.ops).action_assign_agent(cls.agent_a2)
         cls.campaign_b.with_user(cls.ops).action_assign_agent(cls.agent_b1)
+        cls.campaign_b.with_user(cls.ops).action_assign_agent(cls.agent_b2)
         cls.campaign_a.with_user(cls.ops).action_ready()
         cls.campaign_a.with_user(cls.ops).action_activate()
         cls.campaign_b.with_user(cls.ops).action_ready()
@@ -109,6 +111,10 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertFalse(other)
         supervisor = self.env["crm.lead"].with_user(self.sup_a).search([("id", "=", own.id)])
         self.assertEqual(supervisor, own)
+        other_supervisor = self.env["crm.lead"].with_user(self.sup_b).search([("id", "=", own.id)])
+        self.assertFalse(other_supervisor)
+        superuser_visible = self.env["crm.lead"].with_user(self.ops).search([("id", "=", own.id)])
+        self.assertEqual(superuser_visible, own)
 
     def test_05_saved_lead_lock_reassignment_delete_export_and_archive(self):
         lead = self.env["crm.lead"].with_user(self.agent_a1).create({
@@ -206,6 +212,66 @@ class TestCallCenterCRMPhase1(TransactionCase):
         ], limit=1)
         self.assertFalse(old_member.active)
         self.assertTrue(new_member)
+
+    def test_10b_supervisor_transfer_preserves_history_and_native_leader(self):
+        Assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(active_test=False)
+        original = Assignment.search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.sup_a.id),
+            ("role", "=", "supervisor"),
+            ("is_primary", "=", True),
+            ("active", "=", True),
+        ], limit=1)
+        self.assertTrue(original)
+
+        self.campaign_a.with_user(self.ops).write({
+            "primary_supervisor_id": self.sup_b.id,
+            "backup_supervisor_ids": [Command.set([self.sup_a.id])],
+        })
+        original.invalidate_recordset()
+        self.assertFalse(original.active)
+        self.assertTrue(original.date_to)
+
+        replacement = Assignment.search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.sup_b.id),
+            ("role", "=", "supervisor"),
+            ("is_primary", "=", True),
+            ("active", "=", True),
+        ])
+        backup = Assignment.search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.sup_a.id),
+            ("role", "=", "supervisor"),
+            ("is_primary", "=", False),
+            ("active", "=", True),
+        ])
+        self.assertEqual(len(replacement), 1)
+        self.assertEqual(len(backup), 1)
+        self.assertEqual(self.campaign_a.crm_team_id.user_id, self.sup_b)
+        native_members = self.env["crm.team.member"].sudo().search([
+            ("crm_team_id", "=", self.campaign_a.crm_team_id.id),
+            ("active", "=", True),
+        ])
+        self.assertNotIn(self.sup_b.id, native_members.user_id.ids)
+        self.assertNotIn(self.sup_a.id, native_members.user_id.ids)
+
+    def test_10c_duplicate_campaign_code_is_rejected_without_orphan_team(self):
+        Team = self.env["crm.team"].sudo().with_context(active_test=False)
+        before = Team.search_count([("name", "=", "Duplicate Campaign Code Probe")])
+        with self.assertRaises(ValidationError):
+            self.env["callcenter.campaign"].with_user(self.ops).create({
+                "name": "Duplicate Campaign Code Probe",
+                "code": "camp-a",
+                "campaign_type": "outbound",
+                "primary_supervisor_id": self.sup_a.id,
+                "start_at": fields.Datetime.now() - timedelta(hours=1),
+                "end_at": fields.Datetime.now() + timedelta(hours=1),
+            })
+        after = Team.search_count([("name", "=", "Duplicate Campaign Code Probe")])
+        self.assertEqual(before, after)
+
+
 
     def test_11_lifecycle_and_state_audit(self):
         now = fields.Datetime.now()

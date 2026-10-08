@@ -76,24 +76,30 @@ class CallCenterCampaign(models.Model):
             if vals.get("crm_team_id"):
                 raise ValidationError(_("The native CRM team is created automatically."))
             vals["code"] = (vals.get("code") or "").strip().upper()
+            if self.sudo().with_context(active_test=False).search_count([
+                ("code", "=", vals["code"])
+            ]):
+                raise ValidationError(_("Campaign code must be unique."))
             company_id = vals.get("company_id") or self.env.company.id
             primary_id = vals.get("primary_supervisor_id") or False
-            team = self.env["crm.team"].sudo().create({
-                "name": vals.get("name"),
-                "company_id": company_id,
-                "user_id": primary_id,
-                "use_leads": True,
-                "assignment_optout": True,
-            })
-            vals["crm_team_id"] = team.id
-            if self.sudo().with_context(active_test=False).search_count([("code", "=", vals["code"])]):
-                raise ValidationError(_("Campaign code must be unique."))
-            record = super(CallCenterCampaign, self).create(vals)
-            team.sudo().write({"cc_campaign_id": record.id, "assignment_optout": True})
-            record._sync_admin_assignments()
-            record._validate_supervisors()
-            record._sync_supervisor_assignments()
-            records |= record
+            with self.env.cr.savepoint():
+                team = self.env["crm.team"].sudo().create({
+                    "name": vals.get("name"),
+                    "company_id": company_id,
+                    "user_id": primary_id,
+                    "use_leads": True,
+                    "assignment_optout": True,
+                })
+                vals["crm_team_id"] = team.id
+                record = super(CallCenterCampaign, self).create(vals)
+                team.sudo().write({
+                    "cc_campaign_id": record.id,
+                    "assignment_optout": True,
+                })
+                record._sync_admin_assignments()
+                record._validate_supervisors()
+                record._sync_supervisor_assignments()
+                records |= record
         return records
 
     def write(self, vals):
