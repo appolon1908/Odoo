@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_callcenter_lead_list" model="ir.ui.view">
+        <field name="name">crm.lead.callcenter.list</field>
+        <field name="model">crm.lead</field>
+        <field name="arch" type="xml">
+            <list delete="false">
+                <field name="priority"/>
+                <field name="name"/>
+                <field name="contact_name"/>
+                <field name="phone"/>
+                <field name="email_from"/>
+                <field name="cc_campaign_id"/>
+                <field name="user_id"/>
+                <field name="queue_state"/>
+                <field name="cross_campaign_duplicate"/>
+                <field name="create_date"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_callcenter_lead_locked_form" model="ir.ui.view">
+        <field name="name">crm.lead.callcenter.locked.form</field>
+        <field name="model">crm.lead</field>
+        <field name="arch" type="xml">
+            <form delete="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name" readonly="id"/>
+                            <field name="contact_name" readonly="id"/>
+                            <field name="phone" readonly="id"/>
+                            <field name="email_from" readonly="id"/>
+                            <field name="partner_name" readonly="id"/>
+                        </group>
+                        <group>
+                            <field name="cc_campaign_id" readonly="id"/>
+                            <field name="user_id" readonly="1"/>
+                            <field name="queue_state" readonly="1"/>
+                            <field name="next_eligible_at" readonly="1"/>
+                            <field name="cross_campaign_duplicate" readonly="1"/>
+                            <field name="source_external_id" readonly="id"/>
+                        </group>
+                    </group>
+                    <field name="description" readonly="id"/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_callcenter_lead_admin_form" model="ir.ui.view">
+        <field name="name">crm.lead.callcenter.admin.form</field>
+        <field name="model">crm.lead</field>
+        <field name="arch" type="xml">
+            <form delete="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="contact_name"/>
+                            <field name="phone"/>
+                            <field name="email_from"/>
+                            <field name="partner_name"/>
+                        </group>
+                        <group>
+                            <field name="cc_campaign_id"/>
+                            <field name="user_id"/>
+                            <field name="queue_state"/>
+                            <field name="next_eligible_at"/>
+                            <field name="cross_campaign_duplicate" readonly="1"/>
+                            <field name="source_external_id"/>
+                            <field name="source_batch_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <field name="description"/>
+                    <field name="cc_assignment_history_ids" readonly="1">
+                        <list create="false" edit="false" delete="false">
+                            <field name="agent_id"/>
+                            <field name="assigned_at"/>
+                            <field name="released_at"/>
+                            <field name="assignment_source"/>
+                            <field name="assigned_by_id"/>
+                            <field name="reason"/>
+                        </list>
+                    </field>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_callcenter_my_leads" model="ir.actions.act_window">
+        <field name="name">My Leads</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('cc_campaign_id','!=',False),('user_id','=',uid)]</field>
+        <field name="view_ids" eval="[(5,0,0),(0,0,{'view_mode':'list','view_id':ref('view_callcenter_lead_list')}),(0,0,{'view_mode':'form','view_id':ref('view_callcenter_lead_locked_form')})]"/>
+    </record>
+
+    <record id="action_callcenter_campaign_leads" model="ir.actions.act_window">
+        <field name="name">Campaign Leads</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('cc_campaign_id','!=',False)]</field>
+        <field name="view_ids" eval="[(5,0,0),(0,0,{'view_mode':'list','view_id':ref('view_callcenter_lead_list')}),(0,0,{'view_mode':'form','view_id':ref('view_callcenter_lead_locked_form')})]"/>
+    </record>
+
+    <record id="action_callcenter_all_leads" model="ir.actions.act_window">
+        <field name="name">All Call Center Leads</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('cc_campaign_id','!=',False)]</field>
+        <field name="view_ids" eval="[(5,0,0),(0,0,{'view_mode':'list','view_id':ref('view_callcenter_lead_list')}),(0,0,{'view_mode':'form','view_id':ref('view_callcenter_lead_admin_form')})]"/>
+    </record>
+
+    <record id="action_callcenter_create_lead" model="ir.actions.act_window">
+        <field name="name">Create Lead</field>
+        <field name="res_model">crm.lead</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_callcenter_lead_locked_form"/>
+        <field name="target">current</field>
+    </record>
+
+    <record id="action_callcenter_get_next_lead" model="ir.actions.server">
+        <field name="name">Get Next Lead</field>
+        <field name="model_id" ref="crm.model_crm_lead"/>
+        <field name="state">code</field>
+        <field name="code">action = env['crm.lead'].action_cc_get_next_lead()</field>
+    </record>
+
+    <record id="action_callcenter_lead_assignment_history" model="ir.actions.act_window">
+        <field name="name">Lead Assignment History</field>
+        <field name="res_model">callcenter.lead.assignment</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

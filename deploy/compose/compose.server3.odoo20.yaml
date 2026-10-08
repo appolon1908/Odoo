@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres@sha256:65b16a8b326e0cfbdf33fa7e783f2a0cb352a61448616ccccfd616ef42aa0f65
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - odoo20-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  odoo:
+    image: odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533
+    command:
+      - odoo
+      - server
+      - --http-interface=0.0.0.0
+      - --database=codestra_odoo20_staging
+      - --no-database-list
+      - --proxy-mode
+      - --db-filter=^codestra_odoo20_staging$
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "10.0.0.218:8069:8069"
+    volumes:
+      - odoo20-data:/var/lib/odoo
+      - ../../odoo20-addons:/mnt/extra-addons:ro
+
+volumes:
+  odoo20-db:
+  odoo20-data:
