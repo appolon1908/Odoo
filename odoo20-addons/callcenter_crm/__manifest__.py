@@ -15,6 +15,7 @@
         "views/import_views.xml",
         "wizards/lead_import_wizard_views.xml",
         "wizards/role_assignment_wizard_views.xml",
+        "wizards/agent_transfer_wizard_views.xml",
         "wizards/campaign_lifecycle_wizard_views.xml",
         "views/menus.xml",
     ],

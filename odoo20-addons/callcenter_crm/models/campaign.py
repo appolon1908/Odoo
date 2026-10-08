@@ -141,6 +141,8 @@ class CallCenterCampaign(models.Model):
     def _validate_supervisors(self):
         supervisor_group = self.env.ref("callcenter_crm.group_callcenter_supervisor")
         for campaign in self:
+            if campaign.state in {"ready", "active"} and not campaign.primary_supervisor_id:
+                raise ValidationError(_("Ready and Active campaigns require one primary supervisor."))
             if campaign.primary_supervisor_id:
                 if not campaign.primary_supervisor_id.active:
                     raise ValidationError(_("The primary supervisor must be an active user."))
@@ -192,6 +194,23 @@ class CallCenterCampaign(models.Model):
                     })
             campaign._sync_native_team()
 
+    def _active_agent_assignments(self):
+        self.ensure_one()
+        return self.env["callcenter.campaign.assignment"].sudo().search([
+            ("campaign_id", "=", self.id),
+            ("role", "=", "agent"),
+            ("active", "=", True),
+        ])
+
+    def _validate_operational_staffing(self):
+        for campaign in self:
+            if campaign.state in {"ready", "active"}:
+                if not campaign.primary_supervisor_id or not campaign.primary_supervisor_id.active:
+                    raise ValidationError(_("Ready and Active campaigns require an active primary supervisor."))
+                if not campaign._active_agent_assignments():
+                    raise ValidationError(_("Ready and Active campaigns require at least one active agent."))
+        return True
+
     def action_assign_agent(self, user, effective_at=None):
         self.ensure_one()
         if not self._can_manage():
@@ -202,17 +221,45 @@ class CallCenterCampaign(models.Model):
             raise ValidationError(_("A single internal user is required."))
         if not user.active or user.share or not user.has_group("callcenter_crm.group_callcenter_agent"):
             raise ValidationError(_("The selected user must be an active Call Center Agent."))
+
         when = effective_at or fields.Datetime.now()
         Assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(active_test=False)
         existing = Assignment.search([
             ("user_id", "=", user.id), ("role", "=", "agent"), ("active", "=", True)
         ])
+        if existing and existing.campaign_id == self:
+            return existing
+
+        for old in existing:
+            source = old.campaign_id
+            if source.state in {"ready", "active"} and len(source._active_agent_assignments()) <= 1:
+                raise ValidationError(
+                    _("Move another agent into %(campaign)s or pause it before transferring its last active agent.",
+                      campaign=source.display_name)
+                )
+
         if existing:
+            current_leads = self.env["crm.lead"].sudo().search([
+                ("cc_campaign_id", "in", existing.campaign_id.ids),
+                ("user_id", "=", user.id),
+                ("queue_state", "=", "assigned"),
+                ("active", "=", True),
+            ])
+            if current_leads:
+                current_leads._cc_system_update(
+                    {"user_id": False, "queue_state": "available"},
+                    assignment_source="transfer",
+                    reason=_("Agent transferred to another campaign"),
+                    actor_id=self.env.user.id,
+                )
             existing.action_close(when)
-        return Assignment.create({
+
+        assignment = Assignment.create({
             "campaign_id": self.id, "user_id": user.id, "role": "agent",
             "is_primary": True, "date_from": when, "assigned_by_id": self.env.user.id,
         })
+        self._validate_operational_staffing()
+        return assignment
 
     def action_remove_agent(self, user, effective_at=None):
         self.ensure_one()
@@ -223,8 +270,24 @@ class CallCenterCampaign(models.Model):
             ("campaign_id", "=", self.id), ("user_id", "=", user.id),
             ("role", "=", "agent"), ("active", "=", True)
         ])
+        if rows and self.state in {"ready", "active"} and len(self._active_agent_assignments()) <= len(rows):
+            raise ValidationError(_("Ready and Active campaigns must retain at least one active agent."))
         if rows:
+            current_leads = self.env["crm.lead"].sudo().search([
+                ("cc_campaign_id", "=", self.id),
+                ("user_id", "=", user.id),
+                ("queue_state", "=", "assigned"),
+                ("active", "=", True),
+            ])
+            if current_leads:
+                current_leads._cc_system_update(
+                    {"user_id": False, "queue_state": "available"},
+                    assignment_source="transfer",
+                    reason=_("Agent removed from campaign"),
+                    actor_id=self.env.user.id,
+                )
             rows.action_close(effective_at or fields.Datetime.now())
+        self._validate_operational_staffing()
         return True
 
     def _sync_admin_assignments(self):

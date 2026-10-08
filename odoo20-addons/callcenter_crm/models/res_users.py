@@ -47,10 +47,41 @@ class ResUsers(models.Model):
         return users
 
     def write(self, vals):
+        if vals.get("active") is False and "callcenter.campaign.assignment" in self.env:
+            active_operational = self.env["callcenter.campaign.assignment"].sudo().search([
+                ("user_id", "in", self.ids),
+                ("role", "in", ["agent", "supervisor"]),
+                ("active", "=", True),
+            ], limit=1)
+            if active_operational:
+                raise ValidationError(
+                    _("Remove the user's active call-center campaign assignments before deactivating the user.")
+                )
+
         result = super().write(vals)
-        if "group_ids" in vals and "callcenter.campaign" in self.env:
+        if {"group_ids", "active"}.intersection(vals) and "callcenter.campaign" in self.env:
+            self._validate_callcenter_assignment_roles()
             self._sync_callcenter_admin_assignments()
         return result
+
+    def _validate_callcenter_assignment_roles(self):
+        if "callcenter.campaign.assignment" not in self.env:
+            return True
+        Assignment = self.env["callcenter.campaign.assignment"].sudo()
+        agent_group = self.env.ref("callcenter_crm.group_callcenter_agent")
+        supervisor_group = self.env.ref("callcenter_crm.group_callcenter_supervisor")
+        for user in self:
+            groups = user.sudo().all_group_ids
+            rows = Assignment.search([
+                ("user_id", "=", user.id),
+                ("role", "in", ["agent", "supervisor"]),
+                ("active", "=", True),
+            ])
+            if rows.filtered(lambda r: r.role == "agent") and agent_group not in groups:
+                raise ValidationError(_("Remove active agent assignments before removing the Call Center Agent role."))
+            if rows.filtered(lambda r: r.role == "supervisor") and supervisor_group not in groups:
+                raise ValidationError(_("Remove active supervisor assignments before removing the Call Center Supervisor role."))
+        return True
 
     def _sync_callcenter_admin_assignments(self):
         Campaign = self.env["callcenter.campaign"].sudo()
@@ -62,7 +93,7 @@ class ResUsers(models.Model):
         close_at = fields.Datetime.now()
         for user in self:
             groups = user.sudo().all_group_ids
-            should_have = cc_group in groups or sys_group in groups
+            should_have = user.active and (cc_group in groups or sys_group in groups)
             current = Assignment.search([
                 ("user_id", "=", user.id), ("role", "=", "admin"), ("active", "=", True)
             ])

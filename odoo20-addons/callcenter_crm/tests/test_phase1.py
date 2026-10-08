@@ -469,3 +469,74 @@ class TestCallCenterCRMPhase1(TransactionCase):
                 "name": "Assigned draft preload", "phone": "8095550998",
                 "cc_campaign_id": campaign.id, "user_id": self.agent_a1.id,
             })
+
+
+    def test_22_active_campaign_cannot_lose_last_agent(self):
+        now = fields.Datetime.now()
+        campaign = self.env["callcenter.campaign"].with_user(self.ops).create({
+            "name": "Staffing Guard", "code": "STAFF-1", "campaign_type": "outbound",
+            "primary_supervisor_id": self.sup_a.id,
+            "start_at": now - timedelta(hours=1),
+            "end_at": now + timedelta(days=1),
+        })
+        campaign.action_assign_agent(self.agent_b1)
+        campaign.action_ready()
+        campaign.action_activate()
+        with self.assertRaises(ValidationError):
+            campaign.action_remove_agent(self.agent_b1)
+
+    def test_23_transfer_requeues_current_lead_and_preserves_history(self):
+        now = fields.Datetime.now()
+        target = self.env["callcenter.campaign"].with_user(self.ops).create({
+            "name": "Transfer Target", "code": "TRANSFER-TARGET-1", "campaign_type": "outbound",
+            "primary_supervisor_id": self.sup_b.id,
+            "start_at": now - timedelta(hours=1),
+            "end_at": now + timedelta(days=1),
+        })
+        target.action_assign_agent(self.agent_b1)
+        target.action_ready()
+        target.action_activate()
+
+        lead = self.env["crm.lead"].with_user(self.agent_a1).create({
+            "name": "Transfer Working Lead", "phone": "8095551111"
+        })
+        self.campaign_a.with_user(self.ops).action_assign_agent(self.agent_b1)
+        target.with_user(self.ops).action_assign_agent(self.agent_a1)
+
+        lead.invalidate_recordset()
+        self.assertFalse(lead.user_id)
+        self.assertEqual(lead.queue_state, "available")
+        history = self.env["callcenter.lead.assignment"].sudo().search([
+            ("lead_id", "=", lead.id)
+        ], order="id desc", limit=1)
+        self.assertTrue(history.released_at)
+
+    def test_24_active_primary_supervisor_and_user_roles_are_protected(self):
+        with self.assertRaises(ValidationError):
+            self.campaign_a.with_user(self.ops).write({"primary_supervisor_id": False})
+        with self.assertRaises(ValidationError):
+            self.agent_a1.sudo().write({"active": False})
+        with self.assertRaises(ValidationError):
+            self.sup_a.sudo().write({
+                "group_ids": [Command.unlink(self.group_supervisor.id)]
+            })
+
+    def test_25_import_audit_records_are_immutable_to_operational_admin(self):
+        batch = self.env["callcenter.lead.import.batch"].sudo().create({
+            "campaign_id": self.campaign_a.id,
+            "filename": "audit.csv",
+            "file_hash": "a" * 64,
+            "imported_by_id": self.ops.id,
+            "state": "validated",
+            "total_rows": 1,
+        })
+        line = self.env["callcenter.lead.import.line"].sudo().create({
+            "batch_id": batch.id,
+            "row_number": 2,
+            "raw_data": {"name": "Audit"},
+            "status": "ready",
+        })
+        with self.assertRaises(AccessError):
+            batch.with_user(self.ops).write({"total_rows": 999})
+        with self.assertRaises(AccessError):
+            line.with_user(self.ops).write({"status": "error"})

@@ -148,10 +148,13 @@ class CallCenterCampaignAssignment(models.Model):
         if not self._can_manage():
             raise AccessError(_("Only call-center administration may close campaign assignments."))
         close_at = date_to or fields.Datetime.now()
+        affected_campaigns = self.mapped("campaign_id")
         for assignment in self.filtered("active"):
             super(CallCenterCampaignAssignment, assignment.sudo()).write(
                 {"active": False, "date_to": assignment.date_to or close_at}
             )
             if assignment.role == "agent":
                 assignment._sync_native_membership(False)
+        for campaign in affected_campaigns:
+            campaign._validate_operational_staffing()
         return True

@@ -29,6 +29,8 @@
               action="action_callcenter_campaigns" sequence="10"/>
     <menuitem id="menu_callcenter_assignments" name="Assignments" parent="menu_callcenter_admin"
               action="action_callcenter_assignments" sequence="20"/>
+    <menuitem id="menu_callcenter_transfer_agent" name="Transfer Agent" parent="menu_callcenter_admin"
+              action="action_callcenter_agent_transfer_wizard" sequence="25"/>
     <menuitem id="menu_callcenter_all_leads" name="All Leads" parent="menu_callcenter_admin"
               action="action_callcenter_all_leads" sequence="30"/>
     <menuitem id="menu_callcenter_import" name="Lead Imports" parent="menu_callcenter_admin"

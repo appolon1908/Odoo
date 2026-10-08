@@ -93,10 +93,29 @@
         </field>
     </record>
 
+    <record id="view_callcenter_campaign_search" model="ir.ui.view">
+        <field name="name">callcenter.campaign.search</field>
+        <field name="model">callcenter.campaign</field>
+        <field name="arch" type="xml">
+            <search string="Call Center Campaigns">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="state"/>
+                <field name="campaign_type"/>
+                <field name="primary_supervisor_id"/>
+                <field name="client_id"/>
+                <filter name="active_campaigns" string="Active" domain="[('state','=','active'),('active','=',True)]"/>
+                <filter name="paused_campaigns" string="Paused" domain="[('state','=','paused'),('active','=',True)]"/>
+                <filter name="closed_campaigns" string="Closed / Archived" domain="[('state','=','closed')]"/>
+            </search>
+        </field>
+    </record>
+
     <record id="action_callcenter_campaigns" model="ir.actions.act_window">
         <field name="name">Campaigns</field>
         <field name="res_model">callcenter.campaign</field>
         <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_callcenter_campaign_search"/>
         <field name="context">{'active_test': False}</field>
     </record>
 

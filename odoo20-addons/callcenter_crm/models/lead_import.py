@@ -22,6 +22,17 @@ class CallCenterLeadImportBatch(models.Model):
     error_count = fields.Integer(default=0)
     line_ids = fields.One2many("callcenter.lead.import.line", "batch_id", readonly=True)
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+            raise AccessError(_("Lead import audit batches are created only by the controlled importer."))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+            raise AccessError(_("Lead import audit batches are system-managed and cannot be edited directly."))
+        return super().write(vals)
+
     def unlink(self):
         if not self.env.is_superuser():
             raise AccessError(_("Lead import audit batches cannot be deleted."))
@@ -44,6 +55,17 @@ class CallCenterLeadImportLine(models.Model):
     )
     lead_id = fields.Many2one("crm.lead", readonly=True, ondelete="restrict")
     error_message = fields.Char()
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+            raise AccessError(_("Lead import audit lines are created only by the controlled importer."))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if not (self.env.is_superuser() or self.env.user.has_group("base.group_system")):
+            raise AccessError(_("Lead import audit lines are system-managed and cannot be edited directly."))
+        return super().write(vals)
 
     def unlink(self):
         if not self.env.is_superuser():
