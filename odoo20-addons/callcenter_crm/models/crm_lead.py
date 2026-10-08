@@ -220,18 +220,25 @@ class CrmLead(models.Model):
         if not callcenter_records:
             return super().write(vals)
 
+        # A single ORM write must not mix governed and ordinary CRM records.
+        # Applying the same values with sudo would otherwise bypass normal
+        # CRM permissions for unrelated, non-call-center leads.
+        if len(callcenter_records) != len(self):
+            raise AccessError(
+                _("Call-center and ordinary CRM leads must be edited separately.")
+            )
         if not self._cc_is_superuser():
             raise AccessError(
                 _("Saved call-center leads may only be edited by a Call Center Super User.")
             )
 
-        identity_fields = {
-            "cc_campaign_id", "phone", "mobile", "email_from",
-            "source_external_id", "user_id",
-        }
-        if len(callcenter_records) > 1 and identity_fields.intersection(vals):
+        # Every governed record must be checked against its own campaign,
+        # active assignment and duplicate keys before a privileged write.
+        # The previous first-record shortcut reused the first campaign's
+        # team/identity fields when bulk editing different campaigns.
+        if len(self) > 1:
             for lead in self:
-                lead.write(vals)
+                lead.write(dict(vals))
             return True
 
         old_users = {lead.id: lead.user_id.id for lead in self}
