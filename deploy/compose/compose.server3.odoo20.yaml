@@ -22,6 +22,8 @@ services:
       - --http-interface=0.0.0.0
       - --database=codestra_odoo20_staging
       - --no-database-list
+      - --proxy-mode
+      - --db-filter=^codestra_odoo20_staging$
     restart: unless-stopped
     depends_on:
       db:
