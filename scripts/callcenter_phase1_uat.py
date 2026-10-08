@@ -16,6 +16,7 @@ from odoo.exceptions import AccessError, UserError
 prefix = "CC-UAT-" + uuid.uuid4().hex[:10].upper()
 metrics = {}
 checks = {}
+access_denials = 0
 created_users = env["res.users"]
 created_campaigns = env["callcenter.campaign"]
 created_leads = env["crm.lead"]
