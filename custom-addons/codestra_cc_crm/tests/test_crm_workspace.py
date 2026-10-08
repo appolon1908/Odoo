@@ -29,6 +29,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-approver@example.invalid",
             ["codestra_cc_security.group_cc_global_administrator"],
         )
+        cls.call_center_superuser = cls._create_user(
+            "CRM Saved Lead Super User",
+            "cc-crm-saved-lead-superuser@example.invalid",
+            ["codestra_cc_security.group_cc_call_center_superuser"],
+        )
+        cls.technical_admin = cls._create_user(
+            "CRM Technical Administrator",
+            "cc-crm-technical@example.invalid",
+            ["codestra_cc_security.group_cc_technical_administrator"],
+        )
         cls.service = cls._create_user(
             "CRM Identity Service",
             "cc-crm-service@example.invalid",
@@ -43,13 +53,31 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-agent-a@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.agent_a2 = cls._create_user(
+            "CRM Agent A2",
+            "cc-crm-agent-a2@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_agent"],
+        )
         cls.agent_b = cls._create_user(
             "CRM Agent B",
             "cc-crm-agent-b@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.supervisor_a = cls._create_user(
+            "CRM Supervisor A",
+            "cc-crm-supervisor-a@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_supervisor"],
+        )
         cls._activate_membership(cls.agent_a, cls.campaign_a, "CRM-MEMBER-A")
+        cls._activate_membership(cls.agent_a2, cls.campaign_a, "CRM-MEMBER-A2")
         cls._activate_membership(cls.agent_b, cls.campaign_b, "CRM-MEMBER-B")
+        cls._activate_membership(
+            cls.supervisor_a,
+            cls.campaign_a,
+            "CRM-SUPERVISOR-A",
+            role="supervisor",
+            primary=True,
+        )
         cls.partner_a = cls.env["res.partner"].create(
             {
                 "name": "Synthetic CRM Customer A",
@@ -92,6 +120,15 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "cc_source_list_key": "synthetic-list-b",
             }
         )
+        cls.unassigned_a = cls.Lead.with_user(cls.requester).create(
+            {
+                "name": "Campaign A unassigned lead",
+                "campaign_id": cls.campaign_a.id,
+                "user_id": False,
+                "queue_state": "available",
+                "cc_source_list_key": "synthetic-unassigned-a",
+            }
+        )
 
     @classmethod
     def _create_user(cls, name, login, group_xmlids):
@@ -103,7 +140,9 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
 
     @classmethod
-    def _activate_membership(cls, user, campaign, ticket):
+    def _activate_membership(
+        cls, user, campaign, ticket, role="agent", primary=False
+    ):
         employee = cls.env["hr.employee"].create(
             {"name": user.name, "user_id": user.id, "company_id": cls.env.company.id}
         )
@@ -114,7 +153,8 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "user_id": user.id,
                 "employee_id": employee.id,
                 "campaign_id": campaign.id,
-                "role": "agent",
+                "role": role,
+                "is_primary_supervisor": primary,
                 "requested_by_id": cls.requester.id,
                 "source_ticket": ticket,
                 "starts_at": fields.Datetime.now(),
@@ -189,6 +229,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(created.campaign_id, self.campaign_a)
         self.assertEqual(created.call_center_campaign_id, self.campaign_a.legacy_campaign_id)
         self.assertEqual(created.cc_business_unit_id, self.campaign_a.cc_business_unit_id)
+        self.assertEqual(created.user_id, self.agent_a)
         with self.assertRaises(AccessError):
             created.with_user(self.agent_a).write({"campaign_id": self.campaign_b.id})
         with self.assertRaises(AccessError):
@@ -218,13 +259,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
                     "cc_customer_profile_id": self.profile_b.id,
                 }
             )
-        with self.assertRaises(ValidationError):
-            self.Lead.with_user(self.agent_a).create(
-                {
-                    "name": "Missing source list",
-                    "cc_customer_profile_id": self.profile_a.id,
-                }
-            )
+        auto_source = self.Lead.with_user(self.agent_a).create(
+            {
+                "name": "Manual source is system-derived",
+                "cc_customer_profile_id": self.profile_a.id,
+            }
+        )
+        self.assertEqual(
+            auto_source.cc_source_list_key, f"manual:odoo:user:{self.agent_a.id}"
+        )
+        self.assertEqual(auto_source.queue_state, "assigned")
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
 
@@ -238,6 +282,227 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(sum(count for _campaign, count in grouped), 1)
         with self.assertRaises(AccessError):
             self.lead_b.with_user(self.agent_a).read(["name"])
+
+
+    def test_agent_does_not_see_unassigned_but_supervisor_sees_campaign(self):
+        agent_leads = self.Lead.with_user(self.agent_a).search([])
+        self.assertIn(self.lead_a, agent_leads)
+        self.assertNotIn(self.unassigned_a, agent_leads)
+        self.assertFalse(
+            self.Lead.with_user(self.agent_a).search(
+                [("id", "=", self.unassigned_a.id)]
+            )
+        )
+        supervisor_leads = self.Lead.with_user(self.supervisor_a).search(
+            [("campaign_id", "=", self.campaign_a.id)]
+        )
+        self.assertIn(self.lead_a, supervisor_leads)
+        self.assertIn(self.unassigned_a, supervisor_leads)
+        self.assertNotIn(self.lead_b, supervisor_leads)
+
+    def test_saved_lead_reassignment_is_superuser_only(self):
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).action_callcenter_assign_agent(
+                self.agent_a2.id
+            )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
+                self.agent_a2.id
+            )
+        self.lead_a.with_user(self.call_center_superuser).action_callcenter_assign_agent(
+            self.agent_a2.id
+        )
+        self.assertEqual(self.lead_a.user_id, self.agent_a2)
+        history = self.env["callcenter.lead.assignment"].sudo().search(
+            [("lead_id", "=", self.lead_a.id)],
+            order="assigned_at desc, id desc",
+            limit=1,
+        )
+        self.assertEqual(history.agent_id, self.agent_a2)
+        self.assertEqual(history.assignment_source, "transfer")
+        with self.assertRaises(ValidationError):
+            self.lead_a.with_user(self.call_center_superuser).action_callcenter_assign_agent(
+                self.agent_b.id
+            )
+        with self.assertRaises(UserError):
+            self.lead_a.with_user(self.supervisor_a).export_data(["name"])
+
+    def test_archive_and_delete_policy_is_role_enforced(self):
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.agent_a).action_archive()
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_archive()
+        self.lead_a.with_user(self.call_center_superuser).action_archive()
+        self.assertFalse(self.lead_a.active)
+        self.lead_a.with_user(self.call_center_superuser).action_unarchive()
+        self.assertTrue(self.lead_a.active)
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).unlink()
+
+    def test_superuser_cross_campaign_transfer_is_governed(self):
+        target_profile = self.Profile.with_user(self.requester).create_from_partner(
+            self.partner_a, self.campaign_b, "crm-profile-a-campaign-b"
+        )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_transfer_campaign(
+                self.campaign_b.id,
+                target_user_id=self.agent_b.id,
+                target_profile_id=target_profile.id,
+            )
+        self.lead_a.with_user(self.call_center_superuser).action_callcenter_transfer_campaign(
+            self.campaign_b.id,
+            target_user_id=self.agent_b.id,
+            target_profile_id=target_profile.id,
+        )
+        self.assertEqual(self.lead_a.campaign_id, self.campaign_b)
+        self.assertEqual(self.lead_a.user_id, self.agent_b)
+        self.assertEqual(self.lead_a.cc_customer_profile_id, target_profile)
+
+    def test_manual_agent_creation_is_assigned_and_locked_after_save(self):
+        created = self.Lead.with_user(self.agent_a2).create(
+            {
+                "name": "Manual agent-created locked lead",
+                "phone": "+1 809 555 8899",
+            }
+        )
+        self.assertEqual(created.user_id, self.agent_a2)
+        self.assertEqual(created.campaign_id, self.campaign_a)
+        self.assertEqual(created.queue_state, "assigned")
+        self.assertEqual(
+            created.cc_source_list_key, f"manual:odoo:user:{self.agent_a2.id}"
+        )
+        self.assertEqual(created.create_uid, self.agent_a2)
+
+        for actor in (self.agent_a2, self.supervisor_a, self.service, self.requester, self.technical_admin):
+            with self.subTest(actor=actor.login):
+                with self.assertRaises(AccessError):
+                    created.with_user(actor).write(
+                        {"name": f"Forbidden edit by {actor.login}"}
+                    )
+
+        created.with_user(self.call_center_superuser).write(
+            {"name": "Super User corrected lead"}
+        )
+        self.assertEqual(created.name, "Super User corrected lead")
+
+    def test_get_next_lead_uses_priority_locking_and_one_working_lead(self):
+        self.campaign_a.with_user(self.requester).write(
+            {"lifecycle_state": "staging_ready", "active": True}
+        )
+        high = self.Lead.with_user(self.requester).create(
+            {
+                "name": "High priority queue lead",
+                "campaign_id": self.campaign_a.id,
+                "cc_source_list_key": "queue-test-high",
+                "queue_state": "available",
+                "user_id": False,
+                "priority": "3",
+            }
+        )
+        low = self.Lead.with_user(self.requester).create(
+            {
+                "name": "Lower priority queue lead",
+                "campaign_id": self.campaign_a.id,
+                "cc_source_list_key": "queue-test-low",
+                "queue_state": "available",
+                "user_id": False,
+                "priority": "1",
+            }
+        )
+
+        action = self.Lead.with_user(self.agent_a2).action_get_next_lead()
+        self.assertEqual(action["res_id"], high.id)
+        self.assertEqual(high.user_id, self.agent_a2)
+        self.assertEqual(high.queue_state, "assigned")
+        with self.assertRaises(UserError):
+            self.Lead.with_user(self.agent_a2).action_get_next_lead()
+
+        high.sudo()._callcenter_apply_disposition(
+            "callback", reason="Synthetic callback disposition"
+        )
+        action = self.Lead.with_user(self.agent_a2).action_get_next_lead()
+        self.assertEqual(action["res_id"], low.id)
+        history = self.env["callcenter.lead.assignment"].sudo().search(
+            [
+                ("lead_id", "=", high.id),
+                ("assignment_source", "=", "queue"),
+            ],
+            limit=1,
+        )
+        self.assertTrue(history)
+        self.assertTrue(history.released_at)
+
+    def test_csv_import_deduplicates_audits_and_requires_superuser(self):
+        self.Lead.with_user(self.requester).create(
+            {
+                "name": "Cross-campaign existing customer",
+                "phone": "+1 (809) 555-0100",
+                "campaign_id": self.campaign_b.id,
+                "cc_source_list_key": "cross-campaign-fixture",
+                "queue_state": "available",
+                "user_id": False,
+            }
+        )
+        payload = base64.b64encode(
+            (
+                "Name,Phone,External Lead ID,Email,Company,Priority,Source,Notes\n"
+                "Cross Campaign,+1 (809) 555-0100,EXT-100,cross@example.invalid,ACME,High,Vendor A,first\n"
+                "Duplicate Row,+1 809 555 0100,EXT-101,duplicate@example.invalid,ACME,Low,Vendor A,second\n"
+                ",+1 809 555 0200,EXT-102,error@example.invalid,ACME,Low,Vendor A,missing name\n"
+            ).encode()
+        )
+        Batch = self.env["callcenter.lead.import.batch"]
+        with self.assertRaises(AccessError):
+            Batch.with_user(self.agent_a2).create(
+                {
+                    "name": "Forbidden import",
+                    "campaign_id": self.campaign_a.id,
+                    "filename": "leads.csv",
+                    "upload_file": payload,
+                }
+            )
+
+        batch = Batch.with_user(self.call_center_superuser).create(
+            {
+                "name": "Synthetic CSV import",
+                "campaign_id": self.campaign_a.id,
+                "filename": "leads.csv",
+                "upload_file": payload,
+            }
+        )
+        batch.with_user(self.call_center_superuser).action_validate()
+        self.assertEqual(batch.state, "validated")
+        self.assertEqual(batch.total_rows, 3)
+        self.assertEqual(batch.duplicate_count, 1)
+        self.assertEqual(batch.error_count, 1)
+        valid_line = batch.line_ids.filtered(lambda line: line.status == "valid")
+        self.assertEqual(len(valid_line), 1)
+        self.assertTrue(valid_line.cross_campaign_duplicate)
+
+        batch.with_user(self.call_center_superuser).action_import()
+        self.assertEqual(batch.state, "imported")
+        self.assertEqual(batch.created_count, 1)
+        imported = batch.line_ids.filtered(lambda line: line.status == "imported").lead_id
+        self.assertEqual(imported.campaign_id, self.campaign_a)
+        self.assertFalse(imported.user_id)
+        self.assertEqual(imported.queue_state, "available")
+        self.assertTrue(imported.cross_campaign_duplicate)
+
+        duplicate_file = Batch.with_user(self.call_center_superuser).create(
+            {
+                "name": "Repeated file",
+                "campaign_id": self.campaign_a.id,
+                "filename": "leads.csv",
+                "upload_file": payload,
+            }
+        )
+        with self.assertRaises(UserError):
+            duplicate_file.with_user(self.call_center_superuser).action_validate()
+        duplicate_file.with_user(self.call_center_superuser).write(
+            {"override_duplicate_file": True}
+        )
+        duplicate_file.with_user(self.call_center_superuser).action_validate()
+        self.assertEqual(duplicate_file.state, "validated")
 
     def test_profile_chatter_activity_and_attachment_inherit_campaign_scope(self):
         message = self.profile_a.message_post(body="Synthetic campaign A update")

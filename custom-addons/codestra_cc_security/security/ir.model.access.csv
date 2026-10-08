@@ -25,3 +25,5 @@ access_cc_break_glass_technical,cc.break.glass.grant technical,model_cc_break_gl
 access_cc_break_glass_compliance,cc.break.glass.grant compliance,model_cc_break_glass_grant,group_cc_compliance_officer,1,1,0,0
 access_cc_break_glass_global_admin,cc.break.glass.grant global admin,model_cc_break_glass_grant,group_cc_global_administrator,1,1,1,0
 access_cc_break_glass_auditor,cc.break.glass.grant auditor,model_cc_break_glass_grant,group_cc_auditor,1,0,0,0
+access_cc_legacy_business_unit_scoped,legacy business unit read via canonical scope,call_center_core.model_call_center_business_unit,group_cc_scoped_user,1,0,0,0
+access_cc_legacy_campaign_scoped,legacy campaign read via canonical scope,call_center_campaign.model_call_center_campaign,group_cc_scoped_user,1,0,0,0

@@ -179,6 +179,119 @@ class TestCampaignSecurity(TransactionCase):
         self.assertFalse(
             self.requester.has_group("call_center_core.group_call_center_admin")
         )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_agent"),
+            self.env.ref("codestra_cc_security.group_cc_campaign_agent"),
+        )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_supervisor"),
+            self.env.ref("codestra_cc_security.group_cc_campaign_supervisor"),
+        )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_superuser"),
+            self.env.ref("codestra_cc_security.group_cc_call_center_superuser"),
+        )
+        self.assertFalse(
+            self.requester.has_group("base.group_system"),
+            "Operational Call Center Super User must not imply Odoo system administration.",
+        )
+
+    def test_legacy_delegation_is_read_only_and_membership_scoped(self):
+        """_inherits must not turn delegated codes into a legacy access bypass."""
+        unit_a = self.campaign_a.cc_business_unit_id
+        legacy_unit_a = unit_a.legacy_business_unit_id
+        legacy_campaign_a = self.campaign_a.legacy_campaign_id
+
+        # Global approvers have deliberately broad read scope, without system admin.
+        self.assertTrue(self.approver.has_group(
+            "codestra_cc_security.group_cc_global_administrator"
+        ))
+        self.assertEqual(unit_a.with_user(self.approver).code, legacy_unit_a.code)
+        self.assertEqual(self.campaign_a.with_user(self.approver).code, legacy_campaign_a.code)
+
+        # Ordinary agents and supervisors read their own campaign via delegation.
+        for user in (self.agent, self.supervisor):
+            self.assertEqual(unit_a.with_user(user).code, legacy_unit_a.code)
+            self.assertEqual(self.campaign_a.with_user(user).code, legacy_campaign_a.code)
+            for model, values in (
+                ("call.center.business.unit", {"name": "Forbidden"}),
+                ("call.center.campaign", {"name": "Forbidden"}),
+            ):
+                record = legacy_unit_a if model == "call.center.business.unit" else legacy_campaign_a
+                with self.assertRaises(AccessError):
+                    record.with_user(user).write(values)
+
+        # A role/group alone must not grant access before a governed membership.
+        specialists = (
+            ("workforce", "group_cc_workforce_analyst"),
+            ("compliance", "group_cc_compliance_officer"),
+            ("auditor", "group_cc_auditor"),
+            ("qa", "group_cc_quality_analyst"),
+        )
+        for role, group_xmlid in specialists:
+            user = self._create_user(
+                "Scope Check " + role,
+                "scope-check-" + role + "@example.invalid",
+                "codestra_cc_security." + group_xmlid,
+            )
+            self.assertFalse(
+                self.env["call.center.business.unit"].with_user(user).search(
+                    [("id", "=", legacy_unit_a.id)]
+                ),
+                "Role without active membership must not see legacy business units.",
+            )
+            self.assertFalse(
+                self.env["call.center.campaign"].with_user(user).search(
+                    [("id", "=", legacy_campaign_a.id)]
+                ),
+                "Role without active membership must not see legacy campaigns.",
+            )
+            member = self._activate_membership(
+                user, self._create_employee(user), self.campaign_a, role
+            )
+            self.assertEqual(member.state, "active")
+            self.assertEqual(unit_a.with_user(user).code, legacy_unit_a.code)
+            self.assertEqual(self.campaign_a.with_user(user).code, legacy_campaign_a.code)
+            self.assertFalse(
+                self.env["call.center.campaign"].with_user(user).search(
+                    [("id", "=", self.campaign_b.legacy_campaign_id.id)]
+                ),
+                "Active membership in A cannot reveal a separate campaign B.",
+            )
+            with self.assertRaises(AccessError):
+                legacy_campaign_a.with_user(user).write({"name": "Forbidden"})
+
+    def test_unassigned_canonical_and_legacy_business_units_are_hidden(self):
+        """A second unit must stay invisible across both layers."""
+        legacy_other = self.env["call.center.business.unit"].create({
+            "name": "Membership-Isolated Other Unit",
+            "code": "SCOPE-NEGATIVE-OTHER",
+            "company_id": self.env.company.id,
+        })
+        # The canonical auto-adoption hook may have wrapped this legacy unit
+        # already. Reuse that wrapper instead of creating a duplicate.
+        Canonical = self.env["cc.business.unit"].with_context(active_test=False)
+        canonical_other = Canonical.search([
+            ("legacy_business_unit_id", "=", legacy_other.id)
+        ], limit=1)
+        if not canonical_other:
+            canonical_other = Canonical.create({
+                "legacy_business_unit_id": legacy_other.id,
+            })
+        self.assertEqual(canonical_other.legacy_business_unit_id, legacy_other)
+        for user in (self.agent, self.supervisor, self.qa_analyst):
+            self.assertFalse(
+                self.env["cc.business.unit"].with_user(user).search(
+                    [("id", "=", canonical_other.id)]
+                )
+            )
+            self.assertFalse(
+                self.env["call.center.business.unit"].with_user(user).search(
+                    [("id", "=", legacy_other.id)]
+                )
+            )
+            with self.assertRaises(AccessError):
+                legacy_other.with_user(user).read(["code"])
 
     def test_partial_unique_indexes_are_installed(self):
         rows = self.env.execute_query(
@@ -245,6 +358,33 @@ class TestCampaignSecurity(TransactionCase):
             {self.agent_membership.id, self.supervisor_membership.id},
         )
         self.assertNotIn(self.other_membership, supervisor_visible)
+
+
+    def test_backup_supervisor_has_supervised_campaign_visibility(self):
+        backup = self._create_user(
+            "Backup Supervisor",
+            "backup-supervisor@example.invalid",
+            "codestra_cc_security.group_cc_campaign_supervisor",
+        )
+        backup_employee = self._create_employee(backup)
+        backup_membership = self._activate_membership(
+            backup,
+            backup_employee,
+            self.campaign_a,
+            "supervisor",
+            primary=False,
+        )
+        self.assertFalse(backup_membership.is_primary_supervisor)
+        self.assertEqual(backup.cc_supervised_campaign_ids, self.campaign_a)
+        self.assertEqual(
+            self.campaign_a.primary_supervisor_membership_id,
+            self.supervisor_membership,
+        )
+        visible = self.Membership.with_user(backup).search([])
+        self.assertIn(self.agent_membership, visible)
+        self.assertIn(self.supervisor_membership, visible)
+        self.assertIn(backup_membership, visible)
+        self.assertNotIn(self.other_membership, visible)
 
     def test_exact_one_operational_membership_is_enforced(self):
         second = self.Membership.with_user(self.requester).create(

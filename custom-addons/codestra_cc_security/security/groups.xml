@@ -71,11 +71,43 @@
     <field name="implied_ids" eval="[(6, 0, [ref('group_cc_scoped_user')])]"/>
     <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
   </record>
+  <record id="group_cc_call_center_superuser" model="res.groups">
+    <field name="name">Call Center Super User (Saved Lead Authority)</field>
+    <field name="privilege_id" ref="privilege_codestra_contact_center"/>
+    <field name="sequence">95</field>
+    <field name="implied_ids" eval="[(6, 0, [ref('group_cc_global_administrator')])]"/>
+  </record>
   <record id="group_cc_technical_administrator" model="res.groups">
     <field name="name">Technical Administrator</field>
     <field name="privilege_id" ref="privilege_codestra_contact_center"/>
     <field name="sequence">100</field>
     <field name="implied_ids" eval="[(6, 0, [ref('base.group_system')])]"/>
+  </record>
+
+
+  <!-- Stable compatibility XML IDs for the simplified call-center role contract.
+       These IDs alias the canonical Codestra groups instead of creating a second
+       RBAC authority. -->
+  <record id="alias_callcenter_group_callcenter_agent" model="ir.model.data">
+    <field name="module">callcenter</field>
+    <field name="name">group_callcenter_agent</field>
+    <field name="model">res.groups</field>
+    <field name="res_id" ref="group_cc_campaign_agent"/>
+    <field name="noupdate" eval="True"/>
+  </record>
+  <record id="alias_callcenter_group_callcenter_supervisor" model="ir.model.data">
+    <field name="module">callcenter</field>
+    <field name="name">group_callcenter_supervisor</field>
+    <field name="model">res.groups</field>
+    <field name="res_id" ref="group_cc_campaign_supervisor"/>
+    <field name="noupdate" eval="True"/>
+  </record>
+  <record id="alias_callcenter_group_callcenter_superuser" model="ir.model.data">
+    <field name="module">callcenter</field>
+    <field name="name">group_callcenter_superuser</field>
+    <field name="model">res.groups</field>
+    <field name="res_id" ref="group_cc_call_center_superuser"/>
+    <field name="noupdate" eval="True"/>
   </record>
 
   <record id="call_center_core.menu_call_center_configuration" model="ir.ui.menu">

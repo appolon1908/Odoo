@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="view_crm_lead_form_cc_queue" model="ir.ui.view">
+    <field name="name">crm.lead.form.cc.queue</field>
+    <field name="model">crm.lead</field>
+    <field name="inherit_id" ref="view_crm_lead_form_cc_workspace"/>
+    <field name="arch" type="xml">
+      <field name="cc_consent_state" position="after">
+        <field name="queue_state" groups="codestra_cc_security.group_cc_scoped_user" readonly="1"/>
+        <field name="next_eligible_at" groups="codestra_cc_security.group_cc_scoped_user" readonly="1"/>
+        <field name="call_attempt_count" groups="codestra_cc_security.group_cc_scoped_user" readonly="1"/>
+        <field name="last_call_at" groups="codestra_cc_security.group_cc_scoped_user" readonly="1"/>
+        <field name="source_external_id" groups="codestra_cc_security.group_cc_scoped_user" readonly="1"/>
+        <field name="cross_campaign_duplicate" groups="codestra_cc_security.group_cc_campaign_supervisor,codestra_cc_security.group_cc_global_administrator" readonly="1"/>
+      </field>
+      <xpath expr="//form/header" position="inside">
+        <button
+          name="action_callcenter_release_to_queue"
+          type="object"
+          string="Release to Queue"
+          groups="codestra_cc_security.group_cc_global_administrator"
+          invisible="not cc_contact_center_record or queue_state == 'available'"
+        />
+      </xpath>
+    </field>
+  </record>
+
+  <record id="action_callcenter_get_next_lead" model="ir.actions.server">
+    <field name="name">Get Next Lead</field>
+    <field name="model_id" ref="crm.model_crm_lead"/>
+    <field name="state">code</field>
+    <field name="code">action = model.action_get_next_lead()</field>
+  </record>
+
+  <record id="view_callcenter_lead_import_batch_list" model="ir.ui.view">
+    <field name="name">callcenter.lead.import.batch.list</field>
+    <field name="model">callcenter.lead.import.batch</field>
+    <field name="arch" type="xml">
+      <list create="true" edit="false" delete="false">
+        <field name="name"/>
+        <field name="campaign_id"/>
+        <field name="filename"/>
+        <field name="state"/>
+        <field name="total_rows"/>
+        <field name="created_count"/>
+        <field name="duplicate_count"/>
+        <field name="error_count"/>
+        <field name="imported_by_id"/>
+        <field name="imported_at"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_callcenter_lead_import_batch_form" model="ir.ui.view">
+    <field name="name">callcenter.lead.import.batch.form</field>
+    <field name="model">callcenter.lead.import.batch</field>
+    <field name="arch" type="xml">
+      <form create="true" delete="false">
+        <header>
+          <button name="action_validate" type="object" string="Validate Import" class="btn-primary" invisible="state != 'draft'"/>
+          <button name="action_import" type="object" string="Confirm Import" class="btn-primary" invisible="state != 'validated'"/>
+          <field name="state" widget="statusbar" statusbar_visible="draft,validated,imported,failed"/>
+        </header>
+        <sheet>
+          <group>
+            <group>
+              <field name="name"/>
+              <field name="campaign_id" readonly="state != 'draft'" options="{'no_open': True}"/>
+              <field name="upload_file" filename="filename" readonly="state != 'draft'"/>
+              <field name="filename" invisible="1"/>
+              <field name="override_duplicate_file" readonly="state != 'draft'"/>
+            </group>
+            <group>
+              <field name="file_hash" readonly="1"/>
+              <field name="imported_by_id" readonly="1"/>
+              <field name="imported_at" readonly="1"/>
+            </group>
+          </group>
+          <group string="Validation Summary">
+            <field name="total_rows" readonly="1"/>
+            <field name="created_count" readonly="1"/>
+            <field name="duplicate_count" readonly="1"/>
+            <field name="error_count" readonly="1"/>
+          </group>
+          <notebook>
+            <page string="Rows">
+              <field name="line_ids" readonly="1">
+                <list create="false" edit="false" delete="false">
+                  <field name="row_number"/>
+                  <field name="status"/>
+                  <field name="normalized_phone"/>
+                  <field name="normalized_email"/>
+                  <field name="source_external_id"/>
+                  <field name="cross_campaign_duplicate"/>
+                  <field name="lead_id"/>
+                  <field name="error_message"/>
+                </list>
+              </field>
+            </page>
+          </notebook>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_callcenter_lead_import_batches" model="ir.actions.act_window">
+    <field name="name">Lead Imports</field>
+    <field name="res_model">callcenter.lead.import.batch</field>
+    <field name="view_mode">list,form</field>
+  </record>
+
+  <record id="view_callcenter_lead_assignment_list" model="ir.ui.view">
+    <field name="name">callcenter.lead.assignment.list</field>
+    <field name="model">callcenter.lead.assignment</field>
+    <field name="arch" type="xml">
+      <list create="false" edit="false" delete="false">
+        <field name="lead_id"/>
+        <field name="campaign_id"/>
+        <field name="agent_id"/>
+        <field name="assigned_at"/>
+        <field name="released_at"/>
+        <field name="assignment_source"/>
+        <field name="assigned_by_id"/>
+        <field name="reason"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="action_callcenter_lead_assignments" model="ir.actions.act_window">
+    <field name="name">Lead Assignment History</field>
+    <field name="res_model">callcenter.lead.assignment</field>
+    <field name="view_mode">list</field>
+  </record>
+
+  <menuitem
+    id="menu_cc_get_next_lead"
+    name="Get Next Lead"
+    parent="menu_cc_workspace_root"
+    action="action_callcenter_get_next_lead"
+    sequence="5"
+    groups="codestra_cc_security.group_cc_campaign_agent"
+  />
+  <menuitem
+    id="menu_cc_lead_imports"
+    name="Lead Imports"
+    parent="menu_cc_workspace_root"
+    action="action_callcenter_lead_import_batches"
+    sequence="20"
+    groups="codestra_cc_security.group_cc_global_administrator"
+  />
+  <menuitem
+    id="menu_cc_lead_assignment_history"
+    name="Assignment History"
+    parent="menu_cc_workspace_root"
+    action="action_callcenter_lead_assignments"
+    sequence="30"
+    groups="codestra_cc_security.group_cc_global_administrator"
+  />
+</odoo>

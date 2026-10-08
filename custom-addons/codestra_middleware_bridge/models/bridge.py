@@ -7,6 +7,8 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from odoo import api, fields, models
 from odoo.exceptions import AccessError, ValidationError
@@ -82,9 +84,11 @@ class CrmLead(models.Model):
         ondelete={"denied": "set default", "not_applicable": "set default"},
     )
 
-    def _codestra_apply_crm_compliance(self, auth, payload, unit):
-        """Apply the single canonical Middleware consent/suppression policy."""
-        self.ensure_one()
+    @api.model
+    def _codestra_crm_compliance_snapshot_values(
+        self, payload, unit, campaign_id=False
+    ):
+        """Compute the immutable lead compliance snapshot before first save."""
         consent_status = payload.get("consent_status", "unknown")
         allow_external_contact = payload.get("allow_external_contact", False)
         do_not_call = bool(payload.get("do_not_call") or consent_status == "denied")
@@ -100,15 +104,113 @@ class CrmLead(models.Model):
             else "none"
         )
         reason = payload.get("suppression_reason", "optout")
-        self.write({
+        reasons = []
+        if do_not_call or preferred == "none":
+            reasons.append("do_not_contact")
+
+        suppression_model = self.env["call.center.suppression"]
+        for identity_type, identity in (
+            ("phone", payload.get("phone")),
+            ("email", payload.get("email")),
+            ("external_id", payload.get("external_id")),
+        ):
+            digest = suppression_model.hash_identifier(identity)
+            if digest and suppression_model.search_count(
+                [
+                    ("business_unit_id", "=", unit.id),
+                    ("identifier_type", "=", identity_type),
+                    ("identifier_hash", "=", digest),
+                    ("active", "=", True),
+                    "|",
+                    ("expires_at", "=", False),
+                    ("expires_at", ">", fields.Datetime.now()),
+                ]
+            ):
+                reasons.append(f"suppressed_{identity_type}")
+
+        campaign = (
+            self.env["cc.campaign"].browse(campaign_id).exists()
+            if campaign_id
+            else self.env["cc.campaign"]
+        )
+        legacy_campaign_id = campaign.legacy_campaign_id.id if campaign else False
+        rule = self.env["call.center.compliance.rule"].search(
+            [
+                ("active", "=", True),
+                ("business_unit_id", "=", unit.id),
+                "|",
+                ("campaign_id", "=", legacy_campaign_id),
+                ("campaign_id", "=", False),
+            ],
+            order="priority",
+            limit=1,
+        )
+        if rule and rule.consent_required and not (
+            consent_status == "granted" and channels["phone"]
+        ):
+            reasons.append("consent_required")
+
+        state = "blocked" if reasons else "eligible"
+        if not reasons and rule:
+            now_utc = fields.Datetime.now().replace(tzinfo=timezone.utc)
+            timezone_name = (
+                (campaign and campaign.legacy_campaign_id.timezone)
+                or unit.timezone
+                or "UTC"
+            )
+            local_now = now_utc.astimezone(ZoneInfo(timezone_name))
+            local_hour = local_now.hour + (local_now.minute / 60)
+            if not rule.calling_hour_start <= local_hour < rule.calling_hour_end:
+                state = "outside_hours"
+                reasons.append("outside_calling_hours")
+
+        return {
             "consent_status": consent_status,
             "do_not_call": do_not_call,
             "do_not_contact_reason": (
-                reason if do_not_call else
-                "middleware_contact_not_allowed" if not allow_external_contact else False
+                reason
+                if do_not_call
+                else "middleware_contact_not_allowed"
+                if not allow_external_contact
+                else False
             ),
             "preferred_contact_method": preferred,
-        })
+            "contact_eligibility": state,
+            "contact_eligibility_reason": ",".join(reasons) or False,
+            "contact_eligibility_checked_at": fields.Datetime.now(),
+        }
+
+    def _codestra_apply_crm_compliance(self, auth, payload, unit):
+        """Create compliance ledgers without mutating an immutable saved lead."""
+        self.ensure_one()
+        snapshot = self._codestra_crm_compliance_snapshot_values(
+            payload, unit, self.campaign_id.id if self.campaign_id else False
+        )
+        locked = bool(self.cc_contact_center_record)
+        if locked:
+            for field_name in (
+                "consent_status",
+                "do_not_call",
+                "do_not_contact_reason",
+                "preferred_contact_method",
+                "contact_eligibility",
+                "contact_eligibility_reason",
+            ):
+                if self[field_name] != snapshot[field_name]:
+                    raise AccessError(
+                        "Saved call-center lead compliance differs from its immutable creation snapshot."
+                    )
+        else:
+            self.write(snapshot)
+
+        consent_status = snapshot["consent_status"]
+        do_not_call = snapshot["do_not_call"]
+        channels = {
+            "phone": bool(payload.get("phone_consent")),
+            "email": bool(payload.get("email_marketing_consent")),
+            "sms": bool(payload.get("sms_consent")),
+        }
+        reason = payload.get("suppression_reason", "optout")
         user = auth["user"]
         if consent_status in {"granted", "denied"}:
             consent_model = self.env["call.center.consent"].with_user(user)
@@ -119,23 +221,34 @@ class CrmLead(models.Model):
             )
             selected = (
                 [channel for channel, granted in channels.items() if granted]
-                if consent_status == "granted" else list(channels)
+                if consent_status == "granted"
+                else list(channels)
             )
             for channel in selected:
-                consent_model.create({
-                    "lead_id": self.id,
-                    "business_unit_id": unit.id,
-                    "channel": channel,
-                    "status": consent_status,
-                    "consented_at": payload.get("consent_timestamp") or fields.Datetime.now(),
-                    "source": payload.get("consent_source") or "codestra-middleware",
-                    "evidence_reference": evidence,
-                })
+                consent_model.create(
+                    {
+                        "lead_id": self.id,
+                        "business_unit_id": unit.id,
+                        "channel": channel,
+                        "status": consent_status,
+                        "consented_at": payload.get("consent_timestamp")
+                        or fields.Datetime.now(),
+                        "source": payload.get("consent_source")
+                        or "codestra-middleware",
+                        "evidence_reference": evidence,
+                    }
+                )
+
         identifiers = []
         if do_not_call or consent_status == "denied":
             identifiers.append(("phone", self.phone))
         if consent_status == "denied":
-            identifiers.extend((("email", self.email_from), ("external_id", self.external_source_id)))
+            identifiers.extend(
+                (
+                    ("email", self.email_from),
+                    ("external_id", self.external_source_id),
+                )
+            )
         suppression_model = self.env["call.center.suppression"].with_user(user)
         for identity_type, identity in identifiers:
             digest = suppression_model.hash_identifier(identity)
@@ -155,13 +268,35 @@ class CrmLead(models.Model):
             if suppression:
                 suppression.write(values)
             else:
-                suppression_model.create({
-                    **values,
-                    "business_unit_id": unit.id,
-                    "identifier_type": identity_type,
-                    "identifier_hash": digest,
-                })
-        self.action_check_contact_eligibility()
+                suppression_model.create(
+                    {
+                        **values,
+                        "business_unit_id": unit.id,
+                        "identifier_type": identity_type,
+                        "identifier_hash": digest,
+                    }
+                )
+
+        if locked:
+            self.env["call.center.audit.event"].sudo().create(
+                {
+                    "business_unit_id": self.business_unit_id.id,
+                    "event_type": "lead.contact_eligibility.checked",
+                    "model_name": self._name,
+                    "record_id": self.id,
+                    "new_values_json": {
+                        "state": self.contact_eligibility,
+                        "reasons": (
+                            self.contact_eligibility_reason.split(",")
+                            if self.contact_eligibility_reason
+                            else []
+                        ),
+                    },
+                }
+            )
+        else:
+            self.action_check_contact_eligibility()
+
 
 
 class CallCenterConsent(models.Model):

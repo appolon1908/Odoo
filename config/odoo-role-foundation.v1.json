@@ -3,13 +3,15 @@
   "canonical_roles": {
     "SUPER_ADMIN": {
       "odoo_groups": [
-        "codestra_cc_security.group_cc_global_administrator",
-        "codestra_cc_security.group_cc_technical_administrator"
+        "codestra_cc_security.group_cc_global_administrator"
       ],
-      "scope": "governed administrative visibility across companies and campaigns",
+      "scope": "all call-center campaigns and operational administration; does not imply Odoo technical administration",
       "workspace": "admin console",
       "company_scope": "all",
-      "campaign_scope": "all"
+      "campaign_scope": "all",
+      "compatibility_aliases": [
+        "callcenter.group_callcenter_superuser"
+      ]
     },
     "SUPERVISOR": {
       "odoo_groups": [
@@ -18,7 +20,10 @@
       "scope": "supervised campaigns",
       "workspace": "supervisor landing",
       "company_scope": "own business units",
-      "campaign_scope": "cc.campaign.membership (supervisor)"
+      "campaign_scope": "cc.campaign.membership (supervisor)",
+      "compatibility_aliases": [
+        "callcenter.group_callcenter_supervisor"
+      ]
     },
     "AGENT": {
       "odoo_groups": [
@@ -28,7 +33,10 @@
       "scope": "own assigned campaign and its business records",
       "workspace": "agent workspace",
       "company_scope": "own business unit",
-      "campaign_scope": "exactly one active operational membership"
+      "campaign_scope": "exactly one active operational membership",
+      "compatibility_aliases": [
+        "callcenter.group_callcenter_agent"
+      ]
     },
     "INTEGRATION_SERVICE": {
       "odoo_groups": [
@@ -71,6 +79,9 @@
     ],
     "SCOPED_USER": [
       "codestra_cc_security.group_cc_scoped_user"
+    ],
+    "TECHNICAL_ADMINISTRATOR": [
+      "codestra_cc_security.group_cc_technical_administrator"
     ]
   },
   "authority_matrix": "docs/authority/odoo_campaign_access_control_matrix.csv",
@@ -78,6 +89,7 @@
   "isolation": {
     "campaign": "record rules on cc.campaign.scoped.mixin resolve user.cc_allowed_campaign_ids from cc.campaign.membership",
     "company": "record rules resolve user.cc_allowed_business_unit_ids; service groups and global administrators bypass with domain_force [(1,'=',1)]",
-    "break_glass": "cc.break.glass.grant, time-boxed, audited"
+    "break_glass": "cc.break.glass.grant, time-boxed, audited",
+    "operational_superuser": "codestra_cc_security.group_cc_global_administrator is operational and cross-campaign; base.group_system remains separate"
   }
 }

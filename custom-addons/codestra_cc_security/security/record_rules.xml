@@ -36,4 +36,19 @@
     <field name="global" eval="True"/>
     <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.has_group('codestra_cc_security.group_cc_compliance_officer') or user.has_group('codestra_cc_security.group_cc_auditor') else [('user_id', '=', user.id)]</field>
   </record>
+  <!-- Legacy models back delegated fields on cc.business.unit and cc.campaign.
+       ACL read is required for _inherits, but must never reveal unassigned units
+       or campaigns. These global rules intersect all existing legacy rules. -->
+  <record id="rule_cc_legacy_business_unit_canonical_scope" model="ir.rule">
+    <field name="name">Contact Center: canonical membership also scopes legacy business units</field>
+    <field name="model_id" ref="call_center_core.model_call_center_business_unit"/>
+    <field name="global" eval="True"/>
+    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.cc_has_active_break_glass else ([('id', 'in', user.cc_allowed_business_unit_ids.mapped('legacy_business_unit_id').ids)] if user.has_group('codestra_cc_security.group_cc_scoped_user') else [(1, '=', 1)])</field>
+  </record>
+  <record id="rule_cc_legacy_campaign_canonical_scope" model="ir.rule">
+    <field name="name">Contact Center: canonical membership also scopes legacy campaigns</field>
+    <field name="model_id" ref="call_center_campaign.model_call_center_campaign"/>
+    <field name="global" eval="True"/>
+    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.cc_has_active_break_glass else ([('id', 'in', user.cc_allowed_campaign_ids.mapped('legacy_campaign_id').ids)] if user.has_group('codestra_cc_security.group_cc_scoped_user') else [(1, '=', 1)])</field>
+  </record>
 </odoo>

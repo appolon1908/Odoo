@@ -57,21 +57,26 @@ class TestLeadIngestion(TransactionCase):
             "group_ids": [(6, 0, [
                 cls.env.ref("base.group_user").id,
                 cls.env.ref("codestra_lead_ingestion.group_lead_import_admin").id,
+                cls.env.ref("codestra_cc_security.group_cc_call_center_superuser").id,
             ])],
         })
 
     def _batch(self, user=None, content=b"first_name,last_name,phone\nAda,Lovelace,+12025550198\n"):
-        env = self.env(user=user or self.importer)
+        env = self.env(user=user or self.import_admin)
         return env["codestra.lead.import.batch"].create({
             "campaign_id": self.campaign.id, "business_unit_id": self.unit.id,
             "company_id": self.env.company.id, "original_filename": "synthetic.csv",
             "file_mimetype": "text/csv", "file_data": base64.b64encode(content),
         })
 
+    def test_legacy_importer_cannot_create_or_upload_batches(self):
+        with self.assertRaises(AccessError):
+            self._batch(user=self.importer)
+
     def test_defaults_upload_hash_and_lines(self):
         batch = self._batch()
         self.assertEqual(batch.state, "draft")
-        self.assertEqual(batch.upload_user_id, self.importer)
+        self.assertEqual(batch.upload_user_id, self.import_admin)
         batch.action_upload()
         self.assertEqual(batch.state, "uploaded")
         self.assertEqual(len(batch.file_sha256), 64)
