@@ -195,6 +195,47 @@ class TestCallCenterCRMPhase1(TransactionCase):
         self.assertEqual(first.name, "Individually verified")
         self.assertEqual(second.name, "Individually verified")
 
+    def test_navigation_actions_are_scoped_and_clickable(self):
+        campaign = self.campaign_a
+        agent_action = campaign.with_user(self.agent_a1).action_open_leads()
+        admin_action = campaign.with_user(self.ops).action_open_leads()
+        assignment_action = campaign.with_user(self.sup_a).action_open_assignments()
+        self.assertEqual(agent_action["res_model"], "crm.lead")
+        self.assertEqual(agent_action["domain"], [("cc_campaign_id", "=", campaign.id)])
+        self.assertEqual(admin_action["context"]["default_cc_campaign_id"], campaign.id)
+        self.assertEqual(assignment_action["res_model"], "callcenter.campaign.assignment")
+        self.assertEqual(assignment_action["domain"], [("campaign_id", "=", campaign.id)])
+        self.assertTrue(self.env.ref("callcenter_crm.menu_callcenter_overview").action)
+        self.assertTrue(self.env.ref("callcenter_crm.view_callcenter_lead_locked_form"))
+
+    def test_get_next_lead_empty_queue_gives_clickable_feedback(self):
+        response = self.env["crm.lead"].with_user(self.agent_a1).action_cc_get_next_lead()
+        self.assertEqual(response["type"], "ir.actions.client")
+        self.assertEqual(response["tag"], "display_notification")
+        self.assertEqual(response["params"]["type"], "warning")
+
+    def test_read_api_respects_roles_and_campaign_isolation(self):
+        from odoo.addons.callcenter_crm.controllers.api import (
+            campaign_payload, lead_payload, required_role, bounded_page,
+        )
+        from werkzeug.exceptions import BadRequest, Forbidden
+        self.assertEqual(required_role(self.env["crm.lead"].with_user(self.ops).env), "superuser")
+        with self.assertRaises(Forbidden):
+            required_role(self.env["crm.lead"].with_user(self.sales_manager).env)
+        agent_env = self.env["crm.lead"].with_user(self.agent_a1).env
+        super_env = self.env["crm.lead"].with_user(self.ops).env
+        self.assertEqual(campaign_payload(agent_env)["role"], "agent")
+        self.assertEqual(campaign_payload(agent_env)["total"], 1)
+        private = self._lead(self.campaign_a, "8095557731")
+        self.assertTrue(private)
+        self.assertEqual(lead_payload(agent_env)["total"], 0)
+        self.assertEqual(lead_payload(super_env, campaign_id=self.campaign_a.id)["total"], 1)
+        self.assertEqual(lead_payload(super_env, campaign_id=self.campaign_b.id)["total"], 0)
+        with self.assertRaises(BadRequest):
+            bounded_page("-1", 1, 50)
+        with self.assertRaises(BadRequest):
+            bounded_page("200", 1, 50)
+
     def test_06_generic_import_is_blocked_for_agent(self):
         with self.assertRaises(AccessError):
             self.env["crm.lead"].with_user(self.agent_a1).load(

@@ -435,6 +435,33 @@ class CallCenterCampaign(models.Model):
             },
         }
 
+    def action_open_leads(self):
+        """Open this campaign's leads with the role-appropriate form."""
+        self.ensure_one()
+        is_admin = self.env.is_superuser() or self.env.user.has_group(
+            "callcenter_crm.group_callcenter_superuser"
+        )
+        external_id = (
+            "callcenter_crm.action_callcenter_all_leads" if is_admin
+            else "callcenter_crm.action_callcenter_campaign_leads"
+        )
+        action = self.env.ref(external_id).read()[0]
+        action["name"] = _("Leads — %(campaign)s", campaign=self.display_name)
+        action["domain"] = [("cc_campaign_id", "=", self.id)]
+        action["context"] = {"default_cc_campaign_id": self.id}
+        return action
+
+    def action_open_assignments(self):
+        """Use the standard Odoo list/form navigator under existing ACL rules."""
+        self.ensure_one()
+        action = self.env.ref(
+            "callcenter_crm.action_callcenter_assignments"
+        ).read()[0]
+        action["name"] = _("Assignments — %(campaign)s", campaign=self.display_name)
+        action["domain"] = [("campaign_id", "=", self.id)]
+        action["context"] = {"default_campaign_id": self.id}
+        return action
+
     def action_open_pause_wizard(self):
         self.ensure_one()
         if self.state != "active":

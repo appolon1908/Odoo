@@ -412,7 +412,16 @@ class CrmLead(models.Model):
         ))
         row = self.env.cr.fetchone()
         if not row:
-            return False
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Queue is empty"),
+                    "message": _("No eligible leads are available in your active campaign."),
+                    "type": "warning",
+                    "sticky": False,
+                },
+            }
         lead = self.sudo().browse(row[0])
         try:
             with self.env.cr.savepoint():
@@ -430,5 +439,8 @@ class CrmLead(models.Model):
             "res_model": "crm.lead",
             "res_id": lead.id,
             "view_mode": "form",
+            "views": [(self.env.ref(
+                "callcenter_crm.view_callcenter_lead_locked_form"
+            ).id, "form")],
             "target": "current",
         }
