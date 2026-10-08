@@ -16,6 +16,14 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
             "campaign-superuser@example.invalid",
             ["codestra_cc_security.group_cc_global_administrator"],
         )
+        cls.telephony_service = cls._user(
+            "Campaign Call Test Service",
+            "campaign-call-service@example.invalid",
+            [
+                "codestra_vicidial_crm.group_call_admin",
+                "codestra_cc_crm.group_cc_crm_service",
+            ],
+        )
         cls.primary = cls._user(
             "Primary Supervisor",
             "campaign-primary@example.invalid",
@@ -233,7 +241,7 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
         )
         # Call reservation creation belongs to the telephony service, not
         # to the operational Call Center Super User's general ORM ACL.
-        call = self.env["codestra.vicidial.call"].sudo().create(
+        call = self.env["codestra.vicidial.call"].with_user(self.telephony_service).create(
             {
                 "name": "Allowed active campaign call",
                 "uniqueid": "campaign-active-call-test",
@@ -247,7 +255,7 @@ class TestCrmTeamCampaignLifecycle(TransactionCase):
             "Temporary stop"
         )
         with self.assertRaises(AccessError):
-            self.env["codestra.vicidial.call"].sudo().create(
+            self.env["codestra.vicidial.call"].with_user(self.telephony_service).create(
                 {
                     "name": "Blocked paused campaign call",
                     "uniqueid": "campaign-paused-call-test",
