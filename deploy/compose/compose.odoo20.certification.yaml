@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres@sha256:65b16a8b326e0cfbdf33fa7e783f2a0cb352a61448616ccccfd616ef42aa0f65
+    environment:
+      POSTGRES_DB: codestra_odoo20_certification
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD_must_be_set}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d codestra_odoo20_certification"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+    volumes:
+      - odoo20-cert-pgdata:/var/lib/postgresql/data
+  odoo:
+    image: odoo@sha256:cdd83e8359b3e8c357895d476396c05021fed9975bf420f353bab25fcaed1533
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD_must_be_set}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["odoo", "--database=codestra_odoo20_certification", "--no-database-list", "--stop-after-init", "--no-http", "--init=base,crm"]
+    volumes:
+      - ../../custom-addons:/mnt/extra-addons:ro
+      - odoo20-cert-filestore:/var/lib/odoo
+    # No published ports, email, SMS or dialer connections.
+volumes:
+  odoo20-cert-pgdata:
+  odoo20-cert-filestore:
