@@ -309,6 +309,11 @@ class LeadImportBatch(models.Model):
         return self._transition(("validating", "needs_review"), "awaiting_approval")
 
     def action_approve(self):
+        self.ensure_one()
+        # Separate the person who uploaded/imports the source from its approver,
+        # even if a Super User inherits the compliance-manager group.
+        if self.env.user == self.upload_user_id:
+            raise AccessError(_("Lead import batches require an independent approver."))
         return self._transition(("awaiting_approval",), "approved", group="codestra_lead_ingestion.group_compliance_manager")
 
     def action_reject(self):
