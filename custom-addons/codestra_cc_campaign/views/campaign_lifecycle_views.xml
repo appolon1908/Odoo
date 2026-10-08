@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="view_callcenter_crm_team_campaign_list" model="ir.ui.view">
+    <field name="name">crm.team.callcenter.campaign.list</field>
+    <field name="model">crm.team</field>
+    <field name="arch" type="xml">
+      <list default_order="campaign_state, campaign_code">
+        <field name="campaign_code"/>
+        <field name="name"/>
+        <field name="campaign_type"/>
+        <field name="campaign_state"/>
+        <field name="user_id" string="Primary Supervisor"/>
+        <field name="member_ids" string="Active Agents" widget="many2many_tags"/>
+        <field name="start_at"/>
+        <field name="end_at"/>
+        <field name="active"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_callcenter_crm_team_campaign_form" model="ir.ui.view">
+    <field name="name">crm.team.callcenter.campaign.form</field>
+    <field name="model">crm.team</field>
+    <field name="arch" type="xml">
+      <form string="Call Center Campaign">
+        <header>
+          <button name="action_callcenter_ready" type="object" string="Validate / Ready"
+                  class="btn-primary"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'draft' or not active"/>
+          <button name="action_callcenter_return_draft" type="object" string="Return to Draft"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'ready' or not active"/>
+          <button name="action_callcenter_activate" type="object" string="Activate Campaign"
+                  class="btn-primary"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'ready' or not active"/>
+          <button name="action_open_callcenter_pause_wizard" type="object" string="Pause"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'active' or not active"/>
+          <button name="action_callcenter_resume" type="object" string="Resume"
+                  class="btn-primary"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'paused' or not active"/>
+          <button name="action_open_callcenter_close_wizard" type="object" string="Close"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state not in ('active', 'paused') or not active"/>
+          <button name="action_open_callcenter_archive_wizard" type="object" string="Archive"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'closed' or not active"/>
+          <button name="action_duplicate_callcenter_campaign_ui" type="object"
+                  string="Duplicate as Draft"
+                  groups="codestra_cc_security.group_cc_global_administrator"
+                  invisible="campaign_state != 'closed'"/>
+          <field name="campaign_state" widget="statusbar"
+                 statusbar_visible="draft,ready,active,paused,closed"/>
+        </header>
+        <sheet>
+          <group string="Campaign Summary">
+            <group>
+              <field name="is_callcenter_campaign" readonly="1"/>
+              <field name="name" readonly="1"/>
+              <field name="campaign_code" readonly="1"/>
+              <field name="campaign_type" readonly="1"/>
+              <field name="client_id" readonly="1"/>
+              <field name="description" readonly="1"/>
+            </group>
+            <group>
+              <field name="user_id" string="Primary Supervisor" readonly="1"/>
+              <field name="backup_supervisor_ids" widget="many2many_tags" readonly="1"/>
+              <field name="start_at" readonly="1"/>
+              <field name="end_at" readonly="1"/>
+              <field name="active" readonly="1"/>
+              <field name="callcenter_operational" readonly="1"/>
+            </group>
+          </group>
+          <group string="Platform Link">
+            <field name="cc_campaign_id" readonly="1"/>
+            <field name="default_campaign_id" readonly="1"/>
+            <field name="business_unit_id" readonly="1"/>
+          </group>
+          <notebook>
+            <page string="Agent Assignments">
+              <field name="campaign_assignment_ids" readonly="1">
+                <list create="false" edit="false" delete="false">
+                  <field name="user_id"/>
+                  <field name="is_primary"/>
+                  <field name="active"/>
+                  <field name="date_from"/>
+                  <field name="date_to"/>
+                </list>
+              </field>
+            </page>
+            <page string="Supervisor History">
+              <field name="supervisor_history_ids" widget="many2many_tags" readonly="1"/>
+            </page>
+            <page string="Administration"
+                  groups="codestra_cc_security.group_cc_global_administrator">
+              <group>
+                <group>
+                  <field name="name"/>
+                  <field name="campaign_code"/>
+                  <field name="campaign_type"/>
+                  <field name="client_id"/>
+                  <field name="description"/>
+                </group>
+                <group>
+                  <field name="user_id" string="Primary Supervisor"/>
+                  <field name="backup_supervisor_ids" widget="many2many_tags"/>
+                  <field name="start_at"/>
+                  <field name="end_at"/>
+                  <field name="cc_campaign_id"/>
+                  <field name="default_campaign_id"/>
+                  <field name="business_unit_id"/>
+                </group>
+              </group>
+              <field name="campaign_assignment_ids">
+                <list create="true" edit="true" delete="false">
+                  <field name="user_id"/>
+                  <field name="is_primary"/>
+                  <field name="active"/>
+                  <field name="date_from"/>
+                  <field name="date_to"/>
+                </list>
+              </field>
+            </page>
+            <page string="Native CRM Members">
+              <field name="member_ids" widget="many2many_tags" readonly="1"/>
+            </page>
+            <page string="Lifecycle Audit">
+              <field name="campaign_state_log_ids" readonly="1">
+                <list create="false" edit="false" delete="false">
+                  <field name="changed_at"/>
+                  <field name="from_state"/>
+                  <field name="to_state"/>
+                  <field name="changed_by_id"/>
+                  <field name="reason"/>
+                </list>
+              </field>
+            </page>
+          </notebook>
+        </sheet>
+        <chatter/>
+      </form>
+    </field>
+  </record>
+
+  <record id="view_callcenter_campaign_transition_wizard_form" model="ir.ui.view">
+    <field name="name">callcenter.campaign.transition.wizard.form</field>
+    <field name="model">callcenter.campaign.transition.wizard</field>
+    <field name="arch" type="xml">
+      <form string="Campaign Transition">
+        <group>
+          <field name="campaign_id"/>
+          <field name="target_state"/>
+          <field name="reason" placeholder="Required audit reason"/>
+        </group>
+        <footer>
+          <button name="action_confirm" type="object" string="Confirm"
+                  class="btn-primary"/>
+          <button string="Cancel" special="cancel"/>
+        </footer>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_callcenter_crm_team_campaigns" model="ir.actions.act_window">
+    <field name="name">Call Center Campaigns</field>
+    <field name="res_model">crm.team</field>
+    <field name="view_mode">list,form</field>
+    <field name="domain">[('is_callcenter_campaign', '=', True)]</field>
+    <field name="context">{'default_is_callcenter_campaign': True}</field>
+  </record>
+
+  <record id="action_callcenter_crm_team_campaigns_list_view"
+          model="ir.actions.act_window.view">
+    <field name="sequence">1</field>
+    <field name="view_mode">list</field>
+    <field name="view_id" ref="view_callcenter_crm_team_campaign_list"/>
+    <field name="act_window_id" ref="action_callcenter_crm_team_campaigns"/>
+  </record>
+  <record id="action_callcenter_crm_team_campaigns_form_view"
+          model="ir.actions.act_window.view">
+    <field name="sequence">2</field>
+    <field name="view_mode">form</field>
+    <field name="view_id" ref="view_callcenter_crm_team_campaign_form"/>
+    <field name="act_window_id" ref="action_callcenter_crm_team_campaigns"/>
+  </record>
+
+  <menuitem id="menu_callcenter_crm_team_campaigns"
+            name="Campaigns"
+            parent="call_center_core.menu_call_center_root"
+            action="action_callcenter_crm_team_campaigns"
+            sequence="12"
+            groups="codestra_cc_security.group_cc_campaign_agent,codestra_cc_security.group_cc_campaign_supervisor,codestra_cc_security.group_cc_global_administrator"/>
+</odoo>

@@ -43,13 +43,31 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-agent-a@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.agent_a2 = cls._create_user(
+            "CRM Agent A2",
+            "cc-crm-agent-a2@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_agent"],
+        )
         cls.agent_b = cls._create_user(
             "CRM Agent B",
             "cc-crm-agent-b@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.supervisor_a = cls._create_user(
+            "CRM Supervisor A",
+            "cc-crm-supervisor-a@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_supervisor"],
+        )
         cls._activate_membership(cls.agent_a, cls.campaign_a, "CRM-MEMBER-A")
+        cls._activate_membership(cls.agent_a2, cls.campaign_a, "CRM-MEMBER-A2")
         cls._activate_membership(cls.agent_b, cls.campaign_b, "CRM-MEMBER-B")
+        cls._activate_membership(
+            cls.supervisor_a,
+            cls.campaign_a,
+            "CRM-SUPERVISOR-A",
+            role="supervisor",
+            primary=True,
+        )
         cls.partner_a = cls.env["res.partner"].create(
             {
                 "name": "Synthetic CRM Customer A",
@@ -92,6 +110,14 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "cc_source_list_key": "synthetic-list-b",
             }
         )
+        cls.unassigned_a = cls.Lead.with_user(cls.requester).create(
+            {
+                "name": "Campaign A unassigned lead",
+                "campaign_id": cls.campaign_a.id,
+                "user_id": False,
+                "cc_source_list_key": "synthetic-unassigned-a",
+            }
+        )
 
     @classmethod
     def _create_user(cls, name, login, group_xmlids):
@@ -103,7 +129,9 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
 
     @classmethod
-    def _activate_membership(cls, user, campaign, ticket):
+    def _activate_membership(
+        cls, user, campaign, ticket, role="agent", primary=False
+    ):
         employee = cls.env["hr.employee"].create(
             {"name": user.name, "user_id": user.id, "company_id": cls.env.company.id}
         )
@@ -114,7 +142,8 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "user_id": user.id,
                 "employee_id": employee.id,
                 "campaign_id": campaign.id,
-                "role": "agent",
+                "role": role,
+                "is_primary_supervisor": primary,
                 "requested_by_id": cls.requester.id,
                 "source_ticket": ticket,
                 "starts_at": fields.Datetime.now(),
@@ -189,6 +218,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(created.campaign_id, self.campaign_a)
         self.assertEqual(created.call_center_campaign_id, self.campaign_a.legacy_campaign_id)
         self.assertEqual(created.cc_business_unit_id, self.campaign_a.cc_business_unit_id)
+        self.assertEqual(created.user_id, self.agent_a)
         with self.assertRaises(AccessError):
             created.with_user(self.agent_a).write({"campaign_id": self.campaign_b.id})
         with self.assertRaises(AccessError):
@@ -238,6 +268,70 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(sum(count for _campaign, count in grouped), 1)
         with self.assertRaises(AccessError):
             self.lead_b.with_user(self.agent_a).read(["name"])
+
+
+    def test_agent_does_not_see_unassigned_but_supervisor_sees_campaign(self):
+        agent_leads = self.Lead.with_user(self.agent_a).search([])
+        self.assertIn(self.lead_a, agent_leads)
+        self.assertNotIn(self.unassigned_a, agent_leads)
+        self.assertFalse(
+            self.Lead.with_user(self.agent_a).search(
+                [("id", "=", self.unassigned_a.id)]
+            )
+        )
+        supervisor_leads = self.Lead.with_user(self.supervisor_a).search(
+            [("campaign_id", "=", self.campaign_a.id)]
+        )
+        self.assertIn(self.lead_a, supervisor_leads)
+        self.assertIn(self.unassigned_a, supervisor_leads)
+        self.assertNotIn(self.lead_b, supervisor_leads)
+
+    def test_supervisor_reassignment_is_same_campaign_and_server_validated(self):
+        self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
+            self.agent_a2.id
+        )
+        self.assertEqual(self.lead_a.user_id, self.agent_a2)
+        with self.assertRaises(ValidationError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
+                self.agent_b.id
+            )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).write(
+                {"campaign_id": self.campaign_b.id}
+            )
+        with self.assertRaises(UserError):
+            self.lead_a.with_user(self.supervisor_a).export_data(["name"])
+
+    def test_archive_and_delete_policy_is_role_enforced(self):
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.agent_a).action_archive()
+        self.lead_a.with_user(self.supervisor_a).action_archive()
+        self.assertFalse(self.lead_a.active)
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_unarchive()
+        self.lead_a.with_user(self.requester).action_unarchive()
+        self.assertTrue(self.lead_a.active)
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).unlink()
+
+    def test_superuser_cross_campaign_transfer_is_governed(self):
+        target_profile = self.Profile.with_user(self.requester).create_from_partner(
+            self.partner_a, self.campaign_b, "crm-profile-a-campaign-b"
+        )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_transfer_campaign(
+                self.campaign_b.id,
+                target_user_id=self.agent_b.id,
+                target_profile_id=target_profile.id,
+            )
+        self.lead_a.with_user(self.requester).action_callcenter_transfer_campaign(
+            self.campaign_b.id,
+            target_user_id=self.agent_b.id,
+            target_profile_id=target_profile.id,
+        )
+        self.assertEqual(self.lead_a.campaign_id, self.campaign_b)
+        self.assertEqual(self.lead_a.user_id, self.agent_b)
+        self.assertEqual(self.lead_a.cc_customer_profile_id, target_profile)
 
     def test_profile_chatter_activity_and_attachment_inherit_campaign_scope(self):
         message = self.profile_a.message_post(body="Synthetic campaign A update")

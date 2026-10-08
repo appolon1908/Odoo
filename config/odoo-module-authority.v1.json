@@ -429,9 +429,13 @@
     "codestra_cc_campaign": {
       "classification": "COMPATIBILITY",
       "domain": "campaign",
-      "rationale": "Facade only (no models); keeps installation paths stable.",
-      "version": "19.0.1.0.0",
-      "models": [],
+      "rationale": "Governed native crm.team operational campaign facade. Owns Agent assignment history synchronized to crm.team.member, Primary/Backup Supervisor history, reason-gated Draft/Ready/Active/Paused/Closed operational state, archived active=False projection, and fail-closed lead/call gates. It does not replace cc.campaign or codestra_campaign_control_plane as canonical platform/runtime authority.",
+      "version": "19.0.2.0.0",
+      "models": [
+        "callcenter.campaign.assignment",
+        "callcenter.campaign.state.log",
+        "callcenter.campaign.transition.wizard"
+      ],
       "routes": 0,
       "sudo_sites": 0,
       "has_tests": true
@@ -474,8 +478,8 @@
     "codestra_cc_crm": {
       "classification": "CANONICAL",
       "domain": "crm",
-      "rationale": "CRM service group and lead ownership rules for the cc line.",
-      "version": "19.0.1.0.1",
+      "rationale": "Canonical CRM lead/customer-profile authority with assigned-only agent visibility, supervised-campaign reassignment, governed cross-campaign transfer, retention, and export controls.",
+      "version": "19.0.1.1.0",
       "models": [
         "cc.customer.profile"
       ],
@@ -638,8 +642,8 @@
     "codestra_cc_security": {
       "classification": "CANONICAL",
       "domain": "roles",
-      "rationale": "Canonical group set (group_cc_*), campaign membership and break-glass grants that every cc record rule resolves through.",
-      "version": "19.0.1.0.0",
+      "rationale": "Canonical group/membership authority with Agent/Supervisor/operational Super User compatibility aliases, primary/backup supervisor scope, and technical-admin separation.",
+      "version": "19.0.1.1.0",
       "models": [
         "cc.break.glass.grant",
         "cc.campaign.membership"
