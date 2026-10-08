@@ -100,7 +100,7 @@ class CallCenterReadAPI(http.Controller):
 
     @http.route(
         "/callcenter/api/v1/overview",
-        type="http", auth="bearer", methods=["GET"], readonly=True,
+        type="http", auth="bearer", bearer_scope="rpc", methods=["GET"], readonly=True,
         save_session=False,
     )
     def overview(self, **kwargs):
@@ -114,7 +114,7 @@ class CallCenterReadAPI(http.Controller):
 
     @http.route(
         "/callcenter/api/v1/campaigns",
-        type="http", auth="bearer", methods=["GET"], readonly=True,
+        type="http", auth="bearer", bearer_scope="rpc", methods=["GET"], readonly=True,
         save_session=False,
     )
     def campaigns(self, **kwargs):
@@ -124,7 +124,7 @@ class CallCenterReadAPI(http.Controller):
 
     @http.route(
         "/callcenter/api/v1/leads",
-        type="http", auth="bearer", methods=["GET"], readonly=True,
+        type="http", auth="bearer", bearer_scope="rpc", methods=["GET"], readonly=True,
         save_session=False,
     )
     def leads(self, **kwargs):
