@@ -502,9 +502,16 @@ class TestCallCenterCRMPhase1(TransactionCase):
         })
         target.with_user(self.ops).action_assign_agent(self.agent_a1)
 
+        # Transfer removes Agent A's read access to the old unassigned lead.
+        # Verify both the persisted queue state and the expected isolation.
+        lead_id = lead.id
+        lead = lead.sudo()
         lead.invalidate_recordset()
         self.assertFalse(lead.user_id)
         self.assertEqual(lead.queue_state, "available")
+        self.assertFalse(
+            self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead_id)])
+        )
         history = self.env["callcenter.lead.assignment"].sudo().search([
             ("lead_id", "=", lead.id)
         ], order="id desc", limit=1)
