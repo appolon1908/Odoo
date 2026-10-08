@@ -236,6 +236,23 @@ class TestCallCenterCRMPhase1(TransactionCase):
         with self.assertRaises(BadRequest):
             bounded_page("200", 1, 50)
 
+    def test_crm_dashboard_api_key_scope_is_distinct_from_rpc(self):
+        from odoo.addons.callcenter_crm.controllers.api import (
+            CallCenterReadAPI, required_role,
+        )
+        import inspect
+
+        allowed = self.env["res.users.apikeys.description"]._fields["scope"].get_values(self.env)
+        self.assertIn("codestra-crm-read", allowed)
+        self.assertIn("rpc", allowed)
+        self.assertEqual(required_role(self.env["crm.lead"].with_user(self.agent_a1).env), "agent")
+        routes = (CallCenterReadAPI.overview, CallCenterReadAPI.campaigns, CallCenterReadAPI.leads)
+        for method in routes:
+            routing = getattr(method, "routing")
+            self.assertEqual(routing["auth"], "bearer")
+            self.assertEqual(routing["bearer_scope"], "codestra-crm-read")
+            self.assertEqual(routing["methods"], ["GET"])
+
     def test_06_generic_import_is_blocked_for_agent(self):
         with self.assertRaises(AccessError):
             self.env["crm.lead"].with_user(self.agent_a1).load(
