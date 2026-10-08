@@ -33,21 +33,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  certify-spec-1:
-    name: Certify SPEC-1 Phase 1 on Odoo 20
+  certify-spec-1-head:
+    name: Certify SPEC-1 exact head on Odoo 20
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
-      - name: Check out exact source
+      - name: Check out exact source head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source-head identity
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          printf 'SOURCE_HEAD_CERTIFICATION_SHA=%s\n' "$actual"
+          test "$actual" = "$EXPECTED_SHA"
+
+      - name: Run Odoo 20 SPEC-1 source-head certification
+        run: bash scripts/run_odoo20_callcenter_tests.sh
+
+  certify-spec-1-merge:
+    name: Certify SPEC-1 merge result on Odoo 20
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out pull-request merge result
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify source identity
+      - name: Record merge-result identity
         run: |
-          printf 'CERTIFICATION_SHA=%s\n' "$(git rev-parse HEAD)"
+          printf 'MERGE_RESULT_CERTIFICATION_SHA=%s\n' "$(git rev-parse HEAD)"
 
-      - name: Run Odoo 20 SPEC-1 certification
+      - name: Run Odoo 20 SPEC-1 merge-result certification
         run: bash scripts/run_odoo20_callcenter_tests.sh
