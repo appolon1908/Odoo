@@ -159,6 +159,8 @@ class TestCallCenterCRMPhase1(TransactionCase):
         ], limit=1)
         self.assertTrue(assignment)
         assignment.with_user(self.ops).action_close()
+        self.assertFalse(assignment.history_readable)
+        self.assertFalse(assignment.read_authorized)
         for model, record_id in (
             ("crm.lead", lead.id),
             ("callcenter.campaign", self.campaign_a.id),
@@ -492,6 +494,16 @@ class TestCallCenterCRMPhase1(TransactionCase):
         with self.assertRaises(AccessError):
             lead.with_user(self.sup_a).write({"name": "No paused supervisor edit"})
         self.campaign_a.with_user(self.ops).action_close("Campaign complete")
+        history_assignment = self.env["callcenter.campaign.assignment"].sudo().with_context(
+            active_test=False,
+        ).search([
+            ("campaign_id", "=", self.campaign_a.id),
+            ("user_id", "=", self.agent_a1.id),
+            ("role", "=", "agent"),
+        ], limit=1)
+        self.assertFalse(history_assignment.active)
+        self.assertTrue(history_assignment.history_readable)
+        self.assertTrue(history_assignment.read_authorized)
         self.assertEqual(
             self.env["crm.lead"].with_user(self.agent_a1).search([("id", "=", lead.id)]),
             lead,
