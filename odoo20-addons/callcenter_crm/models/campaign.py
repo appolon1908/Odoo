@@ -435,6 +435,44 @@ class CallCenterCampaign(models.Model):
             },
         }
 
+    def action_open_leads(self):
+        """Navigate via declared view IDs; action record reads are admin-only."""
+        self.ensure_one()
+        is_admin = self.env.is_superuser() or self.env.user.has_group(
+            "callcenter_crm.group_callcenter_superuser"
+        )
+        form_view = (
+            "callcenter_crm.view_callcenter_lead_admin_form" if is_admin
+            else "callcenter_crm.view_callcenter_lead_locked_form"
+        )
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Leads — %(campaign)s", campaign=self.display_name),
+            "res_model": "crm.lead",
+            "view_mode": "list,form",
+            "views": [
+                (self.env.ref("callcenter_crm.view_callcenter_lead_list").id, "list"),
+                (self.env.ref(form_view).id, "form"),
+            ],
+            "domain": [("cc_campaign_id", "=", self.id)],
+            "context": {"default_cc_campaign_id": self.id},
+            "target": "current",
+        }
+
+    def action_open_assignments(self):
+        """Navigate through standard views under existing record rules."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Assignments — %(campaign)s", campaign=self.display_name),
+            "res_model": "callcenter.campaign.assignment",
+            "view_mode": "list,form",
+            "views": [(False, "list"), (False, "form")],
+            "domain": [("campaign_id", "=", self.id)],
+            "context": {"default_campaign_id": self.id},
+            "target": "current",
+        }
+
     def action_open_pause_wizard(self):
         self.ensure_one()
         if self.state != "active":
