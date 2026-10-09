@@ -1,0 +1,168 @@
+repository: appolon1908/Odoo
+governance_branch: workstation/governance-control-plane
+promotion_chain: [development, testing, staging, production]
+workstations:
+  - branch: workstation/dev-desktop
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/governance-control-plane
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-01-core-platform
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-02-auth-authorization
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-03-user-hierarchy
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-04-crm
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-05-campaigns
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-06-agent-workspace
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-07-telephony
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-08-messaging
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-09-automation
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-10-sales
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-11-billing
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-12-operations
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-13-documents
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-14-compliance
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-15-analytics
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-16-notifications
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-17-search
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-18-admin
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-19-api
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-20-middleware
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-21-integrations
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-22-security
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-23-database
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-24-testing
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-25-ui
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-26-observability
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-27-ci-cd
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-28-environments
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-29-backup-recovery
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/odoo20-30-saas-multitenant
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws01-core
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws02-api
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws03-security
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws04-deployment
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws05-observability
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws06-testing
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws07-saas
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: workstation/ws08-release
+    kind: section
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
+  - branch: subworkstation/odoo20/01-core-platform/01-runtime-config
+    kind: subsection
+    status: NOT_STARTED
+    required_gates: [lint, unit, integration, contract, security, clean_tree, remote_sha_match, ci_exact_sha, review]
