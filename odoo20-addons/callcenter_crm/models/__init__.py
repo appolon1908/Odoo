@@ -6,3 +6,4 @@ from . import crm_lead
 from . import lead_assignment
 from . import lead_import
 from . import res_users
+from . import api_key_scope
