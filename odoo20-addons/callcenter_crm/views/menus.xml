@@ -3,6 +3,10 @@
     <menuitem id="menu_callcenter_root" name="Call Center" sequence="18"
               groups="callcenter_crm.group_callcenter_agent,callcenter_crm.group_callcenter_supervisor,callcenter_crm.group_callcenter_superuser"/>
 
+    <menuitem id="menu_callcenter_overview" name="Campaign Overview"
+              parent="menu_callcenter_root" action="action_callcenter_campaigns"
+              sequence="5"/>
+
     <menuitem id="menu_callcenter_agent" name="Agent" parent="menu_callcenter_root" sequence="10"
               groups="callcenter_crm.group_callcenter_agent"/>
     <menuitem id="menu_callcenter_my_leads" name="My Leads" parent="menu_callcenter_agent"
