@@ -20,7 +20,7 @@ jobs:
   exact-sha:
     name: Test exact repository SHA
     runs-on: [self-hosted, Linux, X64, codestra-ci, codestra-odoo]
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       EXPECTED_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || github.event.pull_request.head.sha }}
     steps:
@@ -28,42 +28,60 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ env.EXPECTED_SHA }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Prove exact checkout
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Reject merge, rebase, or cherry-pick residue
         shell: bash
         run: |
           set -euo pipefail
-          test ! -e .git/MERGE_HEAD
-          test ! -e .git/CHERRY_PICK_HEAD
-          test ! -d .git/rebase-merge
-          test ! -d .git/rebase-apply
+          test ! -e "$(git rev-parse --git-path MERGE_HEAD)"
+          test ! -e "$(git rev-parse --git-path CHERRY_PICK_HEAD)"
+          test ! -d "$(git rev-parse --git-path rebase-merge)"
+          test ! -d "$(git rev-parse --git-path rebase-apply)"
       - name: Validate repository integrity
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
+          git show --format= --check HEAD
           git fsck --no-progress
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Validate exact candidate source
+        run: bash scripts/run_ci.sh
+      - name: Test exact candidate Odoo 19 runtime
+        run: bash scripts/run_odoo_module_tests.sh
+      - name: Test exact candidate Odoo 20 runtime
+        run: bash scripts/run_odoo20_callcenter_tests.sh
       - name: Record exact-SHA evidence
+        id: evidence
         shell: bash
         run: |
           set -euo pipefail
+          evidence_file="$(mktemp "${RUNNER_TEMP:?}/exact-sha-evidence.XXXXXX")"
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "sha=$(git rev-parse HEAD)"
             echo "runner=${RUNNER_NAME}"
             echo "architecture=${RUNNER_ARCH}"
             echo "os=${RUNNER_OS}"
-          } | tee exact-sha-evidence.txt
+            echo "source_validation=PASS"
+            echo "odoo19_runtime=PASS"
+            echo "odoo20_runtime=PASS"
+          } | tee "$evidence_file"
+          printf 'path=%s\n' "$evidence_file" >> "$GITHUB_OUTPUT"
       - name: Upload exact-SHA evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: exact-sha-evidence-${{ github.run_id }}
-          path: exact-sha-evidence.txt
+          path: ${{ steps.evidence.outputs.path }}
           if-no-files-found: error
           retention-days: 14
