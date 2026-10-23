@@ -363,18 +363,11 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertTrue(user.has_group("codestra_cc_security.group_cc_global_administrator"))
         self.assertFalse(user.has_group("base.group_system"))
         Campaign = self.Campaign.with_user(user)
-        Rule = self.env["ir.rule"].with_user(user)
-        diagnostics = {
-            "groups": user.sudo().all_group_ids.get_external_id(),
-            "canonical_domain": str(Rule._compute_domain("cc.campaign", "read")),
-            "legacy_domain": str(Rule._compute_domain("call.center.campaign", "read")),
-        }
         for campaign in (self.campaign_a, self.campaign_b):
             with self.subTest(campaign=campaign.id):
                 self.assertIn(
                     campaign,
                     Campaign.search([("id", "=", campaign.id)]),
-                    diagnostics,
                 )
                 self.assertEqual(
                     campaign.with_user(user).legacy_campaign_id,
@@ -384,6 +377,10 @@ class TestCampaignCrmWorkspace(TransactionCase):
                     campaign.legacy_campaign_id.with_user(user).code,
                     campaign.code,
                 )
+                self.assertEqual(
+                    campaign.cc_business_unit_id.with_user(user).code,
+                    campaign.cc_business_unit_id.code,
+                )
 
         # Catalog reads do not authorize legacy campaign configuration writes.
         for actor in (self.requester, user):
@@ -392,6 +389,40 @@ class TestCampaignCrmWorkspace(TransactionCase):
                     self.campaign_a.legacy_campaign_id.with_user(actor).write(
                         {"name": "Forbidden legacy configuration change"}
                     )
+
+    def test_superuser_catalog_reads_remain_company_scoped(self):
+        other_company = self.env["res.company"].create(
+            {"name": "CRM Catalog Other Company"}
+        )
+        unit = self.env["cc.business.unit"].create(
+            {
+                "name": "CRM Catalog Other Company Unit",
+                "code": "CRM-OTHER-COMPANY",
+                "company_id": other_company.id,
+            }
+        )
+        campaign = self.Campaign.create(
+            {
+                "name": "CRM Catalog Other Company Campaign",
+                "code": "CRM-OTHER-COMPANY-OUT",
+                "cc_business_unit_id": unit.id,
+                "design_automation_enabled": False,
+            }
+        )
+        user = self.call_center_superuser
+        self.assertNotIn(other_company, user.company_ids)
+        for record in (unit, unit.legacy_business_unit_id, campaign, campaign.legacy_campaign_id):
+            with self.subTest(model=record._name):
+                scoped = record.with_user(user).with_context(active_test=False)
+                self.assertFalse(scoped.search([("id", "=", record.id)]))
+                with self.assertRaises(AccessError):
+                    scoped.read(["name"])
+
+        with self.assertRaises(AccessError):
+            self.unassigned_a.with_user(user).action_callcenter_transfer_campaign(
+                campaign.id
+            )
+        self.assertEqual(self.unassigned_a.campaign_id, self.campaign_a)
 
     def test_manual_agent_creation_is_assigned_and_locked_after_save(self):
         created = self.Lead.with_user(self.agent_a2).create(
