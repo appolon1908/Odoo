@@ -26,10 +26,10 @@
     <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.has_group('codestra_cc_crm.group_cc_crm_service') or user.cc_has_active_break_glass else [('campaign_id', 'in', user.cc_allowed_campaign_ids.ids)]</field>
   </record>
   <record id="rule_cc_customer_profile_agent_assignment" model="ir.rule">
-    <field name="name">Contact Center: agents see assigned or queued profiles</field>
+    <field name="name">Contact Center: agents see only assigned profiles</field>
     <field name="model_id" ref="model_cc_customer_profile"/>
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_agent'))]"/>
-    <field name="domain_force">['|', ('assigned_user_id', '=', user.id), ('assigned_user_id', '=', False)]</field>
+    <field name="domain_force">[('assigned_user_id', '=', user.id)]</field>
   </record>
   <record id="rule_cc_customer_profile_supervisor_campaign" model="ir.rule">
     <field name="name">Contact Center: supervisors see campaign profiles</field>
@@ -42,18 +42,18 @@
     <field name="name">Contact Center: CRM campaign scope</field>
     <field name="model_id" ref="crm.model_crm_lead"/>
     <field name="global" eval="True"/>
-    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.has_group('codestra_cc_crm.group_cc_crm_service') or user.cc_has_active_break_glass else ([('business_unit_id', 'in', user.call_center_business_unit_ids.ids)] if user.has_group('call_center_core.group_call_center_integration_service') else ([('campaign_id', 'in', user.cc_allowed_campaign_ids.ids)] if user.has_group('codestra_cc_security.group_cc_scoped_user') else [('campaign_id', '=', False)]))</field>
+    <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.has_group('codestra_cc_crm.group_cc_crm_service') or user.cc_has_active_break_glass else ([('business_unit_id', 'in', user.call_center_business_unit_ids.ids)] if user.has_group('call_center_core.group_call_center_integration_service') else (['|', ('campaign_id', 'in', user.cc_allowed_campaign_ids.ids), '&amp;', ('team_id.is_callcenter_campaign', '=', True), '|', ('team_id.campaign_assignment_ids.user_id', '=', user.id), ('team_id.supervisor_history_ids', 'in', user.id)] if user.has_group('codestra_cc_security.group_cc_scoped_user') else [('campaign_id', '=', False)]))</field>
   </record>
   <record id="rule_cc_crm_lead_agent_assignment" model="ir.rule">
-    <field name="name">Contact Center: agents see assigned or queued CRM</field>
+    <field name="name">Contact Center: agents see only directly assigned CRM</field>
     <field name="model_id" ref="crm.model_crm_lead"/>
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_agent'))]"/>
-    <field name="domain_force">['|', ('user_id', '=', user.id), ('user_id', '=', False)]</field>
+    <field name="domain_force">[('user_id', '=', user.id)]</field>
   </record>
   <record id="rule_cc_crm_lead_supervisor_campaign" model="ir.rule">
     <field name="name">Contact Center: supervisors see campaign CRM</field>
     <field name="model_id" ref="crm.model_crm_lead"/>
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_supervisor'))]"/>
-    <field name="domain_force">[('campaign_id', 'in', user.cc_supervised_campaign_ids.ids)]</field>
+    <field name="domain_force">['|', ('campaign_id', 'in', user.cc_supervised_campaign_ids.ids), ('team_id.supervisor_history_ids', 'in', user.id)]</field>
   </record>
 </odoo>

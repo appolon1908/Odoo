@@ -11,9 +11,14 @@ RUN set -eux; \
         /opt/chrome-for-testing/chrome-linux64/chrome-wrapper \
         /opt/chrome-for-testing/chrome-linux64/chrome_crashpad_handler \
         /opt/chrome-for-testing/chrome-linux64/chrome_sandbox; \
-    apt-get update; \
+    sed -ri 's|http://(archive|security).ubuntu.com|https://\\1.ubuntu.com|g' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
+    apt-get -o Acquire::Retries=5 -o Acquire::https::Timeout=30 update; \
     while IFS= read -r dependency; do \
-        [ -z "$dependency" ] || apt-get satisfy -y --no-install-recommends "$dependency"; \
+        [ -z "$dependency" ] || apt-get \
+            -o Acquire::Retries=5 \
+            -o Acquire::https::Timeout=30 \
+            satisfy -y --no-install-recommends "$dependency"; \
     done < /opt/chrome-for-testing/chrome-linux64/deb.deps; \
     test -x /opt/chrome-for-testing/chrome-linux64/chrome; \
     /opt/chrome-for-testing/chrome-linux64/chrome --version; \

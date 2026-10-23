@@ -1,5 +1,16 @@
 # Codestra Contact Center Campaign
 
-Mission facade for versioned client and campaign configuration: company, teams, VICIdial mappings, queues, DIDs, caller IDs, hours, timezone, language, skills, scripts, forms, SLAs, provider policy, compliance, retention, and automation allowlists.
+This addon is the governed native-Odoo campaign facade.
 
-Draft configuration never becomes effective until reviewed and published.
+It extends `crm.team` with the operational call-center campaign structure,
+role-scoped visibility, assignment history, lifecycle transitions and audit
+while preserving the existing campaign authorities:
+
+- `cc.campaign` remains the canonical platform campaign workspace.
+- `call.center.campaign` remains the reviewed physical/integration record.
+- `codestra_campaign_control_plane` remains the runtime provisioning and
+  activation authority.
+
+The facade owns no direct provider transport and enables no external effects.
+
+See `docs/authority/CALLCENTER-CAMPAIGN-LIFECYCLE.md`.

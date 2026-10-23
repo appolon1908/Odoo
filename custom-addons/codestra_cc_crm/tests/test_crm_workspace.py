@@ -5,6 +5,8 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
+from ..models.crm_workspace import CRM_SCOPE_MIGRATION_CAPABILITY
+
 
 @tagged("post_install", "-at_install")
 class TestCampaignCrmWorkspace(TransactionCase):
@@ -43,13 +45,31 @@ class TestCampaignCrmWorkspace(TransactionCase):
             "cc-crm-agent-a@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.agent_a2 = cls._create_user(
+            "CRM Agent A2",
+            "cc-crm-agent-a2@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_agent"],
+        )
         cls.agent_b = cls._create_user(
             "CRM Agent B",
             "cc-crm-agent-b@example.invalid",
             ["codestra_cc_security.group_cc_campaign_agent"],
         )
+        cls.supervisor_a = cls._create_user(
+            "CRM Supervisor A",
+            "cc-crm-supervisor-a@example.invalid",
+            ["codestra_cc_security.group_cc_campaign_supervisor"],
+        )
         cls._activate_membership(cls.agent_a, cls.campaign_a, "CRM-MEMBER-A")
+        cls._activate_membership(cls.agent_a2, cls.campaign_a, "CRM-MEMBER-A2")
         cls._activate_membership(cls.agent_b, cls.campaign_b, "CRM-MEMBER-B")
+        cls._activate_membership(
+            cls.supervisor_a,
+            cls.campaign_a,
+            "CRM-SUPERVISOR-A",
+            role="supervisor",
+            primary=True,
+        )
         cls.partner_a = cls.env["res.partner"].create(
             {
                 "name": "Synthetic CRM Customer A",
@@ -92,6 +112,14 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "cc_source_list_key": "synthetic-list-b",
             }
         )
+        cls.unassigned_a = cls.Lead.with_user(cls.requester).create(
+            {
+                "name": "Campaign A unassigned lead",
+                "campaign_id": cls.campaign_a.id,
+                "user_id": False,
+                "cc_source_list_key": "synthetic-unassigned-a",
+            }
+        )
 
     @classmethod
     def _create_user(cls, name, login, group_xmlids):
@@ -103,7 +131,9 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
 
     @classmethod
-    def _activate_membership(cls, user, campaign, ticket):
+    def _activate_membership(
+        cls, user, campaign, ticket, role="agent", primary=False
+    ):
         employee = cls.env["hr.employee"].create(
             {"name": user.name, "user_id": user.id, "company_id": cls.env.company.id}
         )
@@ -114,7 +144,8 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 "user_id": user.id,
                 "employee_id": employee.id,
                 "campaign_id": campaign.id,
-                "role": "agent",
+                "role": role,
+                "is_primary_supervisor": primary,
                 "requested_by_id": cls.requester.id,
                 "source_ticket": ticket,
                 "starts_at": fields.Datetime.now(),
@@ -189,6 +220,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(created.campaign_id, self.campaign_a)
         self.assertEqual(created.call_center_campaign_id, self.campaign_a.legacy_campaign_id)
         self.assertEqual(created.cc_business_unit_id, self.campaign_a.cc_business_unit_id)
+        self.assertEqual(created.user_id, self.agent_a)
         with self.assertRaises(AccessError):
             created.with_user(self.agent_a).write({"campaign_id": self.campaign_b.id})
         with self.assertRaises(AccessError):
@@ -238,6 +270,214 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(sum(count for _campaign, count in grouped), 1)
         with self.assertRaises(AccessError):
             self.lead_b.with_user(self.agent_a).read(["name"])
+
+
+    def test_agent_does_not_see_unassigned_but_supervisor_sees_campaign(self):
+        agent_leads = self.Lead.with_user(self.agent_a).search([])
+        self.assertIn(self.lead_a, agent_leads)
+        self.assertNotIn(self.unassigned_a, agent_leads)
+        self.assertFalse(
+            self.Lead.with_user(self.agent_a).search(
+                [("id", "=", self.unassigned_a.id)]
+            )
+        )
+        supervisor_leads = self.Lead.with_user(self.supervisor_a).search(
+            [("campaign_id", "=", self.campaign_a.id)]
+        )
+        self.assertIn(self.lead_a, supervisor_leads)
+        self.assertIn(self.unassigned_a, supervisor_leads)
+        self.assertNotIn(self.lead_b, supervisor_leads)
+
+    def test_supervisor_reassignment_is_same_campaign_and_server_validated(self):
+        self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
+            self.agent_a2.id
+        )
+        self.assertEqual(self.lead_a.user_id, self.agent_a2)
+        with self.assertRaises(ValidationError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_assign_agent(
+                self.agent_b.id
+            )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).write(
+                {"campaign_id": self.campaign_b.id}
+            )
+        with self.assertRaises(UserError):
+            self.lead_a.with_user(self.supervisor_a).export_data(["name"])
+
+    def test_archive_and_delete_policy_is_role_enforced(self):
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.agent_a).action_archive()
+        with self.assertRaises(AccessError):
+            self.lead_b.with_user(self.supervisor_a).action_archive()
+        with self.assertRaises(AccessError):
+            (self.lead_a | self.lead_b).with_user(self.supervisor_a).action_archive()
+        self.assertTrue(self.lead_a.active)
+        self.assertTrue(self.lead_b.active)
+        self.lead_a.with_user(self.supervisor_a).action_archive()
+        self.assertFalse(self.lead_a.active)
+        self.assertEqual(self.lead_a.write_uid, self.supervisor_a)
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_unarchive()
+        self.lead_a.with_user(self.requester).action_unarchive()
+        self.assertTrue(self.lead_a.active)
+        self.assertEqual(self.lead_a.write_uid, self.requester)
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).unlink()
+
+    def test_saved_governance_flag_cannot_be_disabled_by_any_role(self):
+        technical_admin = self._create_user(
+            "CRM Technical Administrator",
+            "cc-crm-technical-admin@example.invalid",
+            [
+                "base.group_system",
+                "codestra_cc_security.group_cc_global_administrator",
+            ],
+        )
+        actors = (
+            self.agent_a,
+            self.supervisor_a,
+            self.requester,
+            technical_admin,
+        )
+        for actor in actors:
+            lead = self.lead_a.with_user(actor)
+            # Each actor can write this record; denial must protect the flag.
+            lead.write({"cc_contact_center_record": True})
+            for value in (False, 0):
+                with self.subTest(actor=actor.login, value=value):
+                    with self.assertRaises(AccessError), self.cr.savepoint():
+                        lead.write({"cc_contact_center_record": value})
+                    self.assertTrue(self.lead_a.cc_contact_center_record)
+                    self.assertEqual(self.lead_a.campaign_id, self.campaign_a)
+
+        with self.assertRaises(AccessError), self.cr.savepoint():
+            self.lead_a.sudo().with_context(
+                _cc_crm_scope_capability=CRM_SCOPE_MIGRATION_CAPABILITY
+            ).write({"cc_contact_center_record": False})
+        self.assertTrue(self.lead_a.cc_contact_center_record)
+
+    def test_mixed_governance_flag_write_is_atomic_and_ordinary_crm_is_editable(self):
+        ordinary = self.Lead.create(
+            {
+                "name": "Ordinary CRM governance regression",
+                "type": "opportunity",
+                "user_id": False,
+                "team_id": False,
+            }
+        )
+        self.assertFalse(ordinary.cc_contact_center_record)
+        governed_name = self.lead_a.name
+        ordinary_name = ordinary.name
+        with self.assertRaises(AccessError), self.cr.savepoint():
+            (ordinary | self.lead_a).with_user(self.requester).write(
+                {"cc_contact_center_record": False, "name": "Bypassed governance"}
+            )
+        self.assertEqual(self.lead_a.name, governed_name)
+        self.assertEqual(ordinary.name, ordinary_name)
+        self.assertTrue(self.lead_a.cc_contact_center_record)
+        self.assertFalse(ordinary.cc_contact_center_record)
+        ordinary.with_user(self.requester).write(
+            {"cc_contact_center_record": False, "name": "Ordinary CRM remains editable"}
+        )
+        self.assertEqual(ordinary.name, "Ordinary CRM remains editable")
+        self.assertFalse(ordinary.cc_contact_center_record)
+
+    def test_source_key_only_migration_requires_a_nonblank_key(self):
+        lead = self.lead_a.with_user(self.requester).with_context(
+            _cc_crm_scope_capability=CRM_SCOPE_MIGRATION_CAPABILITY
+        )
+        for value in (False, "", "   "):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError), self.cr.savepoint():
+                    lead.write({"cc_source_list_key": value})
+                self.assertEqual(self.lead_a.cc_source_list_key, "synthetic-list-a")
+        lead.write({"cc_source_list_key": "approved-migration-list"})
+        self.assertEqual(self.lead_a.cc_source_list_key, "approved-migration-list")
+
+    def test_archive_updates_scoring_without_granting_frequency_access(self):
+        self.env["ir.config_parameter"].set_param("crm.pls_start_date", "2000-01-01")
+        self.lead_a.write({"probability": 0})
+        self.assertTrue(self.lead_a.stage_id)
+        Frequency = self.env["crm.lead.scoring.frequency"]
+        frequency = Frequency.search(
+            [
+                ("variable", "=", "stage_id"),
+                ("value", "=", str(self.lead_a.stage_id.id)),
+                ("team_id", "=", self.lead_a.team_id.id),
+            ],
+            limit=1,
+        )
+        if not frequency:
+            frequency = Frequency.create(
+                {
+                    "variable": "stage_id",
+                    "value": str(self.lead_a.stage_id.id),
+                    "team_id": self.lead_a.team_id.id,
+                    "won_count": 0.1,
+                    "lost_count": 0.1,
+                }
+            )
+        lost_count = frequency.lost_count
+        won_count = frequency.won_count
+        for user in (self.agent_a, self.supervisor_a, self.requester):
+            with self.assertRaises(AccessError):
+                frequency.with_user(user).read(["lost_count"])
+            with self.assertRaises(AccessError):
+                self.env["crm.tag"].with_user(user).search([])
+
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).prepare_pls_tooltip_data()
+
+        self.lead_a.with_user(self.supervisor_a).action_archive()
+        self.assertFalse(self.lead_a.active)
+        self.assertAlmostEqual(frequency.lost_count, lost_count + 1)
+        self.assertAlmostEqual(frequency.won_count, won_count)
+
+        self.lead_a.with_user(self.requester).action_unarchive()
+        self.assertTrue(self.lead_a.active)
+        self.assertAlmostEqual(frequency.lost_count, lost_count)
+        self.assertAlmostEqual(frequency.won_count, won_count)
+
+    def test_ordinary_lead_scoring_keeps_caller_permissions(self):
+        self.env["ir.config_parameter"].set_param("crm.pls_start_date", "2000-01-01")
+        ordinary = self.Lead.create(
+            {
+                "name": "Ordinary CRM scoring permissions",
+                "type": "opportunity",
+                "user_id": False,
+                "team_id": False,
+                "probability": 0,
+            }
+        )
+        self.assertFalse(ordinary.cc_contact_center_record)
+        for leads in (ordinary, ordinary | self.lead_a):
+            with self.assertRaises(AccessError):
+                leads.with_user(self.requester)._pls_get_naive_bayes_probabilities()
+            with self.assertRaisesRegex(
+                AccessError, r"crm\.lead\.scoring\.frequency"
+            ), self.cr.savepoint():
+                leads.with_user(self.requester).action_archive()
+            self.assertTrue(ordinary.active)
+            self.assertTrue(self.lead_a.active)
+
+    def test_superuser_cross_campaign_transfer_is_governed(self):
+        target_profile = self.Profile.with_user(self.requester).create_from_partner(
+            self.partner_a, self.campaign_b, "crm-profile-a-campaign-b"
+        )
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.supervisor_a).action_callcenter_transfer_campaign(
+                self.campaign_b.id,
+                target_user_id=self.agent_b.id,
+                target_profile_id=target_profile.id,
+            )
+        self.lead_a.with_user(self.requester).action_callcenter_transfer_campaign(
+            self.campaign_b.id,
+            target_user_id=self.agent_b.id,
+            target_profile_id=target_profile.id,
+        )
+        self.assertEqual(self.lead_a.campaign_id, self.campaign_b)
+        self.assertEqual(self.lead_a.user_id, self.agent_b)
+        self.assertEqual(self.lead_a.cc_customer_profile_id, target_profile)
 
     def test_profile_chatter_activity_and_attachment_inherit_campaign_scope(self):
         message = self.profile_a.message_post(body="Synthetic campaign A update")
