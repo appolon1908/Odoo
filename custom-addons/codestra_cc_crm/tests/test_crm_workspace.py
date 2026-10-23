@@ -350,6 +350,11 @@ class TestCampaignCrmWorkspace(TransactionCase):
         for user in (self.agent_a, self.supervisor_a, self.requester):
             with self.assertRaises(AccessError):
                 frequency.with_user(user).read(["lost_count"])
+            with self.assertRaises(AccessError):
+                self.env["crm.tag"].with_user(user).search([])
+
+        with self.assertRaises(AccessError):
+            self.lead_a.with_user(self.requester).prepare_pls_tooltip_data()
 
         self.lead_a.with_user(self.supervisor_a).action_archive()
         self.assertFalse(self.lead_a.active)
@@ -374,6 +379,8 @@ class TestCampaignCrmWorkspace(TransactionCase):
         )
         self.assertFalse(ordinary.cc_contact_center_record)
         for leads in (ordinary, ordinary | self.lead_a):
+            with self.assertRaises(AccessError):
+                leads.with_user(self.requester)._pls_get_naive_bayes_probabilities()
             with self.assertRaisesRegex(
                 AccessError, r"crm\.lead\.scoring\.frequency"
             ), self.cr.savepoint():

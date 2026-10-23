@@ -529,6 +529,30 @@ class CrmLead(models.Model):
             from_state=from_state, to_state=to_state
         )
 
+    def _pls_get_naive_bayes_probabilities(self, batch_mode=False, is_tooltip=False):
+        if is_tooltip:
+            return super()._pls_get_naive_bayes_probabilities(
+                batch_mode=batch_mode, is_tooltip=is_tooltip
+            )
+        governed = self.filtered("cc_contact_center_record")
+        if not governed:
+            return super()._pls_get_naive_bayes_probabilities(batch_mode=batch_mode)
+
+        # Core calls this manually on restore, outside stored-field compute_sudo.
+        # Read scoring inputs internally; return only probabilities for leads the
+        # caller may read. Core still applies those values as the original caller.
+        governed.check_access("read")
+        probabilities, _unused = super(
+            CrmLead, governed.sudo()
+        )._pls_get_naive_bayes_probabilities(batch_mode=batch_mode)
+        ordinary = self - governed
+        if ordinary:
+            ordinary_probabilities, _unused = super(
+                CrmLead, ordinary
+            )._pls_get_naive_bayes_probabilities(batch_mode=batch_mode)
+            probabilities.update(ordinary_probabilities)
+        return probabilities, {}
+
     def action_callcenter_assign_agent(self, target_user_id):
         if not (_is_supervisor(self.env.user) or _is_global_admin(self.env.user)):
             raise AccessError(_("Only a supervisor or Call Center Super User may assign leads."))
