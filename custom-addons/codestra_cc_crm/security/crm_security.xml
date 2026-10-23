@@ -6,6 +6,14 @@
     <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
   </record>
 
+  <!-- The operational Call Center Super User is not a technical administrator,
+       but Odoo CRM's own lead write path reads/updates lead-scoring metadata.
+       Give this dedicated role the normal all-leads CRM user capability so
+       legitimate corrections/archive operations complete without sudo. -->
+  <record id="codestra_cc_security.group_cc_call_center_superuser" model="res.groups">
+    <field name="implied_ids" eval="[(4, ref('sales_team.group_sale_salesman_all_leads'))]"/>
+  </record>
+
   <record id="codestra_cc_security.rule_cc_business_unit_global_scope" model="ir.rule">
     <field name="domain_force">[(1, '=', 1)] if user.has_group('codestra_cc_security.group_cc_global_administrator') or user.has_group('codestra_cc_mail.group_cc_mail_ingestion_service') or user.has_group('codestra_cc_crm.group_cc_crm_service') or user.cc_has_active_break_glass else [('id', 'in', user.cc_allowed_business_unit_ids.ids)]</field>
   </record>
