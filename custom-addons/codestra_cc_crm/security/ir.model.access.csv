@@ -9,7 +9,10 @@ access_cc_crm_lead_agent,crm.lead campaign agent,crm.model_crm_lead,codestra_cc_
 access_cc_crm_lead_supervisor,crm.lead campaign supervisor,crm.model_crm_lead,codestra_cc_security.group_cc_campaign_supervisor,1,1,1,0
 access_cc_crm_lead_config,crm.lead campaign config,crm.model_crm_lead,codestra_cc_security.group_cc_campaign_configuration_manager,1,1,1,0
 access_cc_crm_lead_auditor,crm.lead campaign auditor,crm.model_crm_lead,codestra_cc_security.group_cc_auditor,1,0,0,0
-access_cc_crm_lead_admin,crm.lead campaign admin,crm.model_crm_lead,codestra_cc_security.group_cc_global_administrator,1,1,1,1
+access_cc_crm_lead_admin,crm.lead campaign admin,crm.model_crm_lead,codestra_cc_security.group_cc_global_administrator,1,1,1,0
 access_cc_crm_lead_service,crm.lead campaign service,crm.model_crm_lead,group_cc_crm_service,1,1,1,0
 access_cc_crm_unit_service,cc.business.unit CRM service,codestra_cc_core.model_cc_business_unit,group_cc_crm_service,1,0,0,0
 access_cc_crm_campaign_service,cc.campaign CRM service,codestra_cc_core.model_cc_campaign,group_cc_crm_service,1,0,0,0
+access_callcenter_lead_import_batch_admin,callcenter.lead.import.batch admin,model_callcenter_lead_import_batch,codestra_cc_security.group_cc_global_administrator,1,1,1,0
+access_callcenter_lead_import_line_admin,callcenter.lead.import.line admin,model_callcenter_lead_import_line,codestra_cc_security.group_cc_global_administrator,1,0,0,0
+access_callcenter_lead_assignment_admin,callcenter.lead.assignment admin,model_callcenter_lead_assignment,codestra_cc_security.group_cc_global_administrator,1,0,0,0
