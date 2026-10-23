@@ -160,6 +160,12 @@ class CrmLeadQueue(models.Model):
                     values["queue_state"] = "available"
             if values.get("source_batch_id"):
                 _require_global_admin(self.env)
+                campaign_id = values.get("campaign_id")
+                if not campaign_id and values.get("cc_customer_profile_id"):
+                    profile = self.env["cc.customer.profile"].browse(values["cc_customer_profile_id"])
+                    profile.check_access("read")
+                    campaign_id = profile.campaign_id.id
+                self._queue_validate_import_batch(values["source_batch_id"], [campaign_id])
                 values["queue_state"] = "available"
                 values["user_id"] = False
                 values["cc_contact_center_record"] = True
@@ -213,6 +219,15 @@ class CrmLeadQueue(models.Model):
             )
         return records
 
+    @api.model
+    def _queue_validate_import_batch(self, batch_id, campaign_ids):
+        batch = self.env["callcenter.lead.import.batch"].browse(batch_id).exists()
+        if not batch:
+            raise ValidationError(_("The source import batch does not exist."))
+        batch.check_access("read")
+        if set(campaign_ids) != {batch.campaign_id.id}:
+            raise ValidationError(_("The source import batch must match the lead campaign."))
+
     def write(self, values):
         governed = self.filtered("cc_contact_center_record")
         queue_capability = self.env.context.get("_cc_lead_queue_capability")
@@ -231,6 +246,13 @@ class CrmLeadQueue(models.Model):
                         "Super User or an authorized system process may change them."
                     )
                 )
+
+        if self and values.get("source_batch_id"):
+            _require_global_admin(self.env)
+            self._queue_validate_import_batch(
+                values["source_batch_id"],
+                [values.get("campaign_id", lead.campaign_id.id) for lead in self],
+            )
 
         assignment_before = {}
         track_admin_assignment = (
@@ -645,6 +667,13 @@ class CallcenterLeadImportBatch(models.Model):
             "override_duplicate_file",
         }.intersection(values):
             raise AccessError(_("Validated import source data is immutable."))
+        if values.get("campaign_id"):
+            # A write rule checks the current row; also validate the destination
+            # before moving a draft batch and its raw audit rows to that scope.
+            campaign = self.env["cc.campaign"].browse(values["campaign_id"])
+            campaign.check_access("read")
+            if campaign.cc_business_unit_id.company_id not in self.env.companies:
+                raise AccessError(_("The import campaign is outside the allowed companies."))
         return super().write(values)
 
     def unlink(self):

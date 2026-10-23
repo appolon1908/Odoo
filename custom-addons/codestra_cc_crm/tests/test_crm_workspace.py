@@ -619,7 +619,7 @@ class TestCampaignCrmWorkspace(TransactionCase):
 
         foreign_batch = self.env["callcenter.lead.import.batch"].with_user(
             self.call_center_superuser
-        ).create(
+        ).sudo().create(
             {
                 "name": "Inaccessible source campaign",
                 "campaign_id": campaign.id,
@@ -629,12 +629,167 @@ class TestCampaignCrmWorkspace(TransactionCase):
                 ),
             }
         )
+        scoped_foreign_batch = foreign_batch.with_user(self.call_center_superuser)
         with self.assertRaises(AccessError):
-            foreign_batch.action_validate()
+            scoped_foreign_batch.action_validate()
         self.assertEqual(foreign_batch.state, "draft")
         self.assertFalse(foreign_batch.line_ids)
         with self.assertRaises(AccessError):
-            foreign_batch.action_import()
+            scoped_foreign_batch.action_import()
+
+    def test_import_and_assignment_audit_reads_follow_active_company_scope(self):
+        company, campaign = self._other_company_campaign()
+        Batch = self.env["callcenter.lead.import.batch"].with_user(self.call_center_superuser)
+        payload = base64.b64encode(b"name,phone\nPrivate customer,+15550008201\n")
+        batch_values = {"name": "Private import", "filename": "private.csv", "upload_file": payload}
+        local_batch = Batch.create({**batch_values, "campaign_id": self.campaign_a.id})
+        foreign_batch = Batch.sudo().create({**batch_values, "campaign_id": campaign.id})
+        Line = self.env["callcenter.lead.import.line"].sudo()
+        line_values = {
+            "row_number": 2,
+            "raw_data": {"name": "Private customer", "phone": "+15550008201"},
+            "normalized_phone": "15550008201",
+        }
+        local_line = Line.create({**line_values, "batch_id": local_batch.id})
+        foreign_line = Line.create({**line_values, "batch_id": foreign_batch.id})
+        foreign_lead = self.Lead.sudo().with_company(company).create(
+            {
+                "name": "Foreign assignment audit fixture",
+                "campaign_id": campaign.id,
+                "company_id": company.id,
+                "cc_source_list_key": "foreign-assignment-audit",
+                "user_id": False,
+            }
+        )
+        Assignment = self.env["callcenter.lead.assignment"].sudo()
+        local_assignment = Assignment.search([("lead_id", "=", self.lead_a.id)], limit=1)
+        self.assertTrue(local_assignment)
+        foreign_assignment = Assignment.create(
+            {
+                "lead_id": foreign_lead.id,
+                "campaign_id": campaign.id,
+                "agent_id": self.agent_a.id,
+                "assigned_by_id": self.call_center_superuser.id,
+                "assignment_source": "admin",
+                "reason": "Private foreign assignment history",
+            }
+        )
+        cases = (
+            (local_batch, foreign_batch, ["name", "upload_file"], "campaign_id", "name"),
+            (local_line, foreign_line, ["raw_data", "normalized_phone"], "batch_id", "normalized_phone"),
+            (local_assignment, foreign_assignment, ["reason", "agent_id"], "campaign_id", "reason"),
+        )
+        for actor in (self.call_center_superuser, self.requester):
+            self.assertNotIn(company, actor.company_ids)
+            for local, foreign, private_fields, group_field, export_field in cases:
+                with self.subTest(actor=actor.login, model=local._name):
+                    Model = self.env[local._name].with_user(actor)
+                    self.assertFalse(Model.env.su)
+                    local_scoped = Model.browse(local.id)
+                    foreign_scoped = Model.browse(foreign.id)
+                    self.assertEqual(local_scoped.read(private_fields)[0]["id"], local.id)
+                    self.assertEqual(len(local_scoped.export_data([export_field])["datas"]), 1)
+                    self.assertFalse(Model.search([("id", "=", foreign.id)]))
+                    rows = Model.search_read([("id", "in", [local.id, foreign.id])], private_fields)
+                    self.assertEqual([row["id"] for row in rows], [local.id])
+                    self.assertFalse(Model.read_group(
+                        [("id", "=", foreign.id)], ["record_count:count(id)"], [group_field]
+                    ))
+                    grouped = Model.read_group(
+                        [("id", "in", [local.id, foreign.id])],
+                        ["record_count:count(id)"], [group_field],
+                    )
+                    self.assertEqual(sum(row["record_count"] for row in grouped), 1)
+                    with self.assertRaises(AccessError):
+                        foreign_scoped.read(private_fields)
+                    with self.assertRaises(AccessError):
+                        foreign_scoped.export_data([export_field])
+                    with self.assertRaises(AccessError):
+                        (local_scoped | foreign_scoped).export_data([export_field])
+
+        # Membership in two companies does not expose the inactive company.
+        self.call_center_superuser.sudo().write({"company_ids": [(4, company.id)]})
+        for _local, foreign, private_fields, _group_field, _export_field in cases:
+            Model = self.env[foreign._name].with_user(self.call_center_superuser)
+            self.assertFalse(Model.with_context(
+                allowed_company_ids=[self.env.company.id]
+            ).search([("id", "=", foreign.id)]))
+            visible = Model.with_context(
+                allowed_company_ids=[self.env.company.id, company.id]
+            ).browse(foreign.id)
+            self.assertEqual(visible.read(private_fields)[0]["id"], foreign.id)
+
+        # The writable batch model cannot create or move data outside scope.
+        restricted = Batch.with_context(allowed_company_ids=[self.env.company.id])
+        restricted.browse(local_batch.id).write({"name": "Updated local import"})
+        self.assertEqual(local_batch.name, "Updated local import")
+        with self.assertRaises(AccessError), self.env.cr.savepoint():
+            restricted.create({**batch_values, "campaign_id": campaign.id})
+        with self.assertRaises(AccessError), self.env.cr.savepoint():
+            restricted.browse(foreign_batch.id).write({"name": "Forbidden rewrite"})
+        with self.assertRaises(AccessError), self.env.cr.savepoint():
+            restricted.browse(local_batch.id).write({"campaign_id": campaign.id})
+        self.assertEqual(local_batch.campaign_id, self.campaign_a)
+        self.assertEqual(foreign_batch.name, "Private import")
+
+        # Audit rows retain their read-only ACL and append-only behavior.
+        for actor in (self.call_center_superuser, self.requester):
+            with self.subTest(actor=actor.login):
+                with self.assertRaises(AccessError):
+                    local_line.with_user(actor).write({"normalized_phone": "forged"})
+                with self.assertRaises(AccessError):
+                    Line.with_user(actor).create({**line_values, "batch_id": local_batch.id})
+                with self.assertRaises(AccessError):
+                    local_assignment.with_user(actor).write({"reason": "forged"})
+                with self.assertRaises(AccessError):
+                    Assignment.with_user(actor).create(
+                        {
+                            "lead_id": self.lead_a.id,
+                            "campaign_id": self.campaign_a.id,
+                            "agent_id": self.agent_a.id,
+                            "assigned_by_id": actor.id,
+                            "assignment_source": "admin",
+                        }
+                    )
+
+    def test_explicit_import_provenance_requires_readable_matching_batch(self):
+        company, campaign = self._other_company_campaign()
+        Batch = self.env["callcenter.lead.import.batch"].with_user(self.call_center_superuser)
+        batch_values = {
+            "name": "Provenance scope",
+            "filename": "provenance-scope.csv",
+            "upload_file": base64.b64encode(b"name,phone\nSynthetic,+15550008301\n"),
+        }
+        local_batch = Batch.create({**batch_values, "campaign_id": self.campaign_a.id})
+        other_batch = Batch.create({**batch_values, "campaign_id": self.campaign_b.id})
+        foreign_batch = Batch.sudo().create({**batch_values, "campaign_id": campaign.id})
+        Lead = self.Lead.with_user(self.call_center_superuser)
+        values = {
+            "name": "Validated import provenance",
+            "campaign_id": self.campaign_a.id,
+            "cc_source_list_key": "import-provenance-scope",
+            "user_id": False,
+        }
+        for batch, error in ((foreign_batch, AccessError), (other_batch, ValidationError)):
+            with self.subTest(batch=batch.id):
+                with self.assertRaises(error), self.env.cr.savepoint():
+                    Lead.create({**values, "source_batch_id": batch.id})
+                with self.assertRaises(error), self.env.cr.savepoint():
+                    Lead.with_context(default_source_batch_id=batch.id).create(values)
+                with self.assertRaises(error), self.env.cr.savepoint():
+                    self.unassigned_a.with_user(self.call_center_superuser).write(
+                        {"source_batch_id": batch.id}
+                    )
+        self.assertFalse(self.unassigned_a.source_batch_id)
+        created = Lead.create({**values, "source_batch_id": local_batch.id})
+        self.assertEqual(created.source_batch_id, local_batch)
+        self.unassigned_a.with_user(self.call_center_superuser).write(
+            {"source_batch_id": local_batch.id}
+        )
+        self.assertEqual(self.unassigned_a.source_batch_id, local_batch)
+        created.action_callcenter_transfer_campaign(self.campaign_b.id)
+        self.assertEqual(created.campaign_id, self.campaign_b)
+        self.assertEqual(created.source_batch_id, local_batch)
 
     def test_crm_search_name_group_and_direct_id_do_not_leak(self):
         LeadA = self.Lead.with_user(self.agent_a)

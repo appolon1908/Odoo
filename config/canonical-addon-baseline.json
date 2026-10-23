@@ -293,7 +293,7 @@
   "additional_strict_overrides": {
     "codestra_cc_crm": {
       "base_tree": "196b1631510c711f1118cb8812288c6e6e6b30ac",
-      "current_tree": "f7c5b879497ec0f3280036c5294cda4e3dedc0b4",
+      "current_tree": "1cbb7ac38c176e7edbe8c4777639be5993b9b701",
       "integration_boundary_exceptions": [
         {
           "kind": "odoo_cursor_locking",
@@ -302,7 +302,7 @@
         }
       ],
       "pull_request": 157,
-      "reason": "PR #157 extends the canonical Codestra CRM with Super-User-governed CSV/XLSX lead import, post-save source-record locking, duplicate protection, append-only assignment history, and concurrency-safe Get Next Lead allocation. Raw SQL is limited to parameterized SELECT statements on Odoo's existing cursor for duplicate reads and row locking; all business mutations continue through the Odoo ORM. Reconciles PR #154 manual creation and saved-source locking with the private, elevated five-field queue capability; supervisor creation uses an eligible same-campaign agent or the unassigned pool. No public context bypass or tenant-scope relaxation is introduced. Follow-up review preserves saved governance classification and nonblank provenance, preflights queue release and import campaign access, bounds duplicate indicators to the source company, restricts import-batch provenance to the dedicated authority, and audits supervisor-selected creation assignments."
+      "reason": "PR #157 extends the canonical Codestra CRM with Super-User-governed CSV/XLSX lead import, post-save source-record locking, duplicate protection, append-only assignment history, and concurrency-safe Get Next Lead allocation. Raw SQL is limited to parameterized SELECT statements on Odoo's existing cursor for duplicate reads and row locking; all business mutations continue through the Odoo ORM. Reconciles PR #154 manual creation and saved-source locking with the private, elevated five-field queue capability; supervisor creation uses an eligible same-campaign agent or the unassigned pool. No public context bypass or tenant-scope relaxation is introduced. Follow-up review preserves saved governance classification and nonblank provenance, preflights queue release and import campaign access, bounds duplicate indicators to the source company, restricts import-batch provenance to the dedicated authority, and audits supervisor-selected creation assignments. Global active-company record rules now protect direct reads, exports, grouping, and mutations of import batches, raw import rows, and assignment history; draft-batch moves and explicit provenance links validate destination scope without widening ACLs."
     },
     "codestra_kyqra_review_hub": {
       "base_tree": "93ed2c44e0208abc733d1ef5f189973857e9c2d1",

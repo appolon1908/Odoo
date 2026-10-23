@@ -1,7 +1,7 @@
 {
     "name": "Codestra Contact Center CRM",
     "summary": "Campaign customer profiles, CRM ownership, and safe activities",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.2.1",
     "author": "Codestra",
     "license": "LGPL-3",
     "depends": [

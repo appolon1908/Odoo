@@ -27,6 +27,10 @@ A matching customer in a different campaign in the source campaign's company is 
 
 Only the dedicated import authority may supply `source_batch_id` during lead creation, including through context defaults. Operational callers cannot attach leads to import audit batches.
 
+An explicitly supplied or corrected batch link must reference a readable batch
+in the lead's initial or current campaign. A later authorized campaign transfer
+preserves the original import batch as historical provenance.
+
 ## Lead pool
 
 Imported leads enter the campaign pool as:
@@ -85,5 +89,13 @@ An agent cannot receive a second normal lead while another lead is `assigned` to
 `callcenter.lead.assignment` records assignment source, actor, agent, campaign, assigned time, release time, and reason. The record is append-only except for the one-time release finalization performed by the internal queue service.
 
 An explicit supervisor assignment at creation records `manual_supervisor_creation` with that supervisor as the actor and the selected agent as the owner. Creating an unassigned pool lead creates no assignment-history entry until assignment occurs.
+
+Global record rules restrict import batches, raw import rows, and assignment
+history to the active allowed companies (`company_ids`) of their campaign.
+This boundary applies to search, grouped reads, direct record reads, exports,
+and mutations, including for the dedicated Super User and global administrators.
+Moving a draft batch also validates the destination campaign before its audit
+rows change scope. Existing read-only audit ACLs and history retention remain in
+force; system audit creation uses the validated internal operations above.
 
 Import batches are retained and cannot be deleted.

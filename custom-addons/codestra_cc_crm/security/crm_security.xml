@@ -84,4 +84,37 @@
     <field name="groups" eval="[(4, ref('codestra_cc_security.group_cc_campaign_supervisor'))]"/>
     <field name="domain_force">[('campaign_id', 'in', user.cc_supervised_campaign_ids.ids)]</field>
   </record>
+
+  <!-- Audit data contains raw customer inputs and must retain the campaign's
+       company boundary on every ORM surface, including direct read/export. -->
+  <record id="rule_callcenter_lead_import_batch_company" model="ir.rule">
+    <field name="name">Lead import batches: active company scope</field>
+    <field name="model_id" ref="model_callcenter_lead_import_batch"/>
+    <field name="global" eval="True"/>
+    <field name="domain_force">[('campaign_id.cc_business_unit_id.company_id', 'in', company_ids)]</field>
+    <field name="perm_read" eval="True"/>
+    <field name="perm_write" eval="True"/>
+    <field name="perm_create" eval="True"/>
+    <field name="perm_unlink" eval="True"/>
+  </record>
+  <record id="rule_callcenter_lead_import_line_company" model="ir.rule">
+    <field name="name">Lead import rows: active company scope</field>
+    <field name="model_id" ref="model_callcenter_lead_import_line"/>
+    <field name="global" eval="True"/>
+    <field name="domain_force">[('batch_id.campaign_id.cc_business_unit_id.company_id', 'in', company_ids)]</field>
+    <field name="perm_read" eval="True"/>
+    <field name="perm_write" eval="True"/>
+    <field name="perm_create" eval="True"/>
+    <field name="perm_unlink" eval="True"/>
+  </record>
+  <record id="rule_callcenter_lead_assignment_company" model="ir.rule">
+    <field name="name">Lead assignments: active company scope</field>
+    <field name="model_id" ref="model_callcenter_lead_assignment"/>
+    <field name="global" eval="True"/>
+    <field name="domain_force">[('campaign_id.cc_business_unit_id.company_id', 'in', company_ids)]</field>
+    <field name="perm_read" eval="True"/>
+    <field name="perm_write" eval="True"/>
+    <field name="perm_create" eval="True"/>
+    <field name="perm_unlink" eval="True"/>
+  </record>
 </odoo>
