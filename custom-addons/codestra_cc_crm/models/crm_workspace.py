@@ -413,6 +413,12 @@ class CrmLead(models.Model):
 
     def write(self, values):
         governed = self.filtered("cc_contact_center_record")
+        if (
+            governed
+            and "cc_contact_center_record" in values
+            and not values["cc_contact_center_record"]
+        ):
+            raise AccessError(_("Saved campaign CRM records cannot disable governance."))
         if {
             "campaign_id",
             "cc_customer_profile_id",
@@ -702,6 +708,7 @@ class CrmLead(models.Model):
         "campaign_id",
         "cc_customer_profile_id",
         "cc_contact_center_record",
+        "cc_source_list_key",
         "call_center_campaign_id",
         "business_unit_id",
         "user_id",

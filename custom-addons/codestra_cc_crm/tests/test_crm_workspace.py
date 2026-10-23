@@ -5,6 +5,8 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
+from ..models.crm_workspace import CRM_SCOPE_MIGRATION_CAPABILITY
+
 
 @tagged("post_install", "-at_install")
 class TestCampaignCrmWorkspace(TransactionCase):
@@ -321,6 +323,76 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(self.lead_a.write_uid, self.requester)
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
+
+    def test_saved_governance_flag_cannot_be_disabled_by_any_role(self):
+        technical_admin = self._create_user(
+            "CRM Technical Administrator",
+            "cc-crm-technical-admin@example.invalid",
+            [
+                "base.group_system",
+                "codestra_cc_security.group_cc_global_administrator",
+            ],
+        )
+        actors = (
+            self.agent_a,
+            self.supervisor_a,
+            self.requester,
+            technical_admin,
+        )
+        for actor in actors:
+            lead = self.lead_a.with_user(actor)
+            # Each actor can write this record; denial must protect the flag.
+            lead.write({"cc_contact_center_record": True})
+            for value in (False, 0):
+                with self.subTest(actor=actor.login, value=value):
+                    with self.assertRaises(AccessError), self.cr.savepoint():
+                        lead.write({"cc_contact_center_record": value})
+                    self.assertTrue(self.lead_a.cc_contact_center_record)
+                    self.assertEqual(self.lead_a.campaign_id, self.campaign_a)
+
+        with self.assertRaises(AccessError), self.cr.savepoint():
+            self.lead_a.sudo().with_context(
+                _cc_crm_scope_capability=CRM_SCOPE_MIGRATION_CAPABILITY
+            ).write({"cc_contact_center_record": False})
+        self.assertTrue(self.lead_a.cc_contact_center_record)
+
+    def test_mixed_governance_flag_write_is_atomic_and_ordinary_crm_is_editable(self):
+        ordinary = self.Lead.create(
+            {
+                "name": "Ordinary CRM governance regression",
+                "type": "opportunity",
+                "user_id": False,
+                "team_id": False,
+            }
+        )
+        self.assertFalse(ordinary.cc_contact_center_record)
+        governed_name = self.lead_a.name
+        ordinary_name = ordinary.name
+        with self.assertRaises(AccessError), self.cr.savepoint():
+            (ordinary | self.lead_a).with_user(self.requester).write(
+                {"cc_contact_center_record": False, "name": "Bypassed governance"}
+            )
+        self.assertEqual(self.lead_a.name, governed_name)
+        self.assertEqual(ordinary.name, ordinary_name)
+        self.assertTrue(self.lead_a.cc_contact_center_record)
+        self.assertFalse(ordinary.cc_contact_center_record)
+        ordinary.with_user(self.requester).write(
+            {"cc_contact_center_record": False, "name": "Ordinary CRM remains editable"}
+        )
+        self.assertEqual(ordinary.name, "Ordinary CRM remains editable")
+        self.assertFalse(ordinary.cc_contact_center_record)
+
+    def test_source_key_only_migration_requires_a_nonblank_key(self):
+        lead = self.lead_a.with_user(self.requester).with_context(
+            _cc_crm_scope_capability=CRM_SCOPE_MIGRATION_CAPABILITY
+        )
+        for value in (False, "", "   "):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError), self.cr.savepoint():
+                    lead.write({"cc_source_list_key": value})
+                self.assertEqual(self.lead_a.cc_source_list_key, "synthetic-list-a")
+        lead.write({"cc_source_list_key": "approved-migration-list"})
+        self.assertEqual(self.lead_a.cc_source_list_key, "approved-migration-list")
 
     def test_archive_updates_scoring_without_granting_frequency_access(self):
         self.env["ir.config_parameter"].set_param("crm.pls_start_date", "2000-01-01")
