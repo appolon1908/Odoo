@@ -358,6 +358,41 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(self.lead_a.user_id, self.agent_b)
         self.assertEqual(self.lead_a.cc_customer_profile_id, target_profile)
 
+    def test_call_center_superuser_can_read_delegated_campaign_catalog(self):
+        user = self.call_center_superuser
+        self.assertTrue(user.has_group("codestra_cc_security.group_cc_global_administrator"))
+        self.assertFalse(user.has_group("base.group_system"))
+        Campaign = self.Campaign.with_user(user)
+        Rule = self.env["ir.rule"].with_user(user)
+        diagnostics = {
+            "groups": user.sudo().all_group_ids.get_external_id(),
+            "canonical_domain": str(Rule._compute_domain("cc.campaign", "read")),
+            "legacy_domain": str(Rule._compute_domain("call.center.campaign", "read")),
+        }
+        for campaign in (self.campaign_a, self.campaign_b):
+            with self.subTest(campaign=campaign.id):
+                self.assertIn(
+                    campaign,
+                    Campaign.search([("id", "=", campaign.id)]),
+                    diagnostics,
+                )
+                self.assertEqual(
+                    campaign.with_user(user).legacy_campaign_id,
+                    campaign.legacy_campaign_id,
+                )
+                self.assertEqual(
+                    campaign.legacy_campaign_id.with_user(user).code,
+                    campaign.code,
+                )
+
+        # Catalog reads do not authorize legacy campaign configuration writes.
+        for actor in (self.requester, user):
+            with self.subTest(actor=actor.login):
+                with self.assertRaises(AccessError):
+                    self.campaign_a.legacy_campaign_id.with_user(actor).write(
+                        {"name": "Forbidden legacy configuration change"}
+                    )
+
     def test_manual_agent_creation_is_assigned_and_locked_after_save(self):
         created = self.Lead.with_user(self.agent_a2).create(
             {
@@ -386,7 +421,9 @@ class TestCampaignCrmWorkspace(TransactionCase):
         self.assertEqual(created.name, "Super User corrected lead")
 
     def test_get_next_lead_uses_priority_locking_and_one_working_lead(self):
-        self.campaign_a.with_user(self.requester).write(
+        # Prepare staging state as the fixture owner: active is delegated to
+        # the legacy campaign, which the requester deliberately cannot write.
+        self.campaign_a.sudo().write(
             {"lifecycle_state": "staging_ready", "active": True}
         )
         high = self.Lead.with_user(self.requester).create(
