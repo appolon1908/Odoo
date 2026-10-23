@@ -8,7 +8,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
 from .crm_workspace import (
-    CRM_TRANSITION_CAPABILITY,
+    CRM_QUEUE_FIELDS,
     CRM_QUEUE_SYSTEM_CAPABILITY,
     _is_call_center_super_user,
     _is_global_admin,
@@ -18,20 +18,7 @@ from .crm_workspace import (
 
 QUEUE_SYSTEM_CAPABILITY = CRM_QUEUE_SYSTEM_CAPABILITY
 ASSIGNMENT_HISTORY_CAPABILITY = object()
-QUEUE_CONTROLLED_FIELDS = {
-    "user_id",
-    "queue_state",
-    "next_eligible_at",
-    "call_attempt_count",
-    "last_call_at",
-}
-TRANSITION_CONTROLLED_FIELDS = {
-    "codestra_workflow_id",
-    "codestra_current_status_id",
-    "codestra_previous_status_id",
-    "status_entered_at",
-    "stage_id",
-}
+QUEUE_CONTROLLED_FIELDS = CRM_QUEUE_FIELDS
 QUEUE_ACTIVE_LIFECYCLE_STATES = {"staging_ready", "active"}
 NON_DIGIT_RE = re.compile(r"\D+")
 COLUMN_ALIASES = {
@@ -143,6 +130,8 @@ class CrmLeadQueue(models.Model):
             operational_membership = self.env.user._cc_resolve_operational_membership()
         for original in values_list:
             values = dict(original)
+            if "source_batch_id" not in values and self.env.context.get("default_source_batch_id"):
+                values["source_batch_id"] = self.env.context["default_source_batch_id"]
             if operational_membership:
                 campaign = operational_membership.campaign_id
                 supplied_campaign_id = values.get("campaign_id")
@@ -167,8 +156,10 @@ class CrmLeadQueue(models.Model):
                 elif values.get("user_id"):
                     values["queue_state"] = "assigned"
                 else:
+                    values["user_id"] = False
                     values["queue_state"] = "available"
             if values.get("source_batch_id"):
+                _require_global_admin(self.env)
                 values["queue_state"] = "available"
                 values["user_id"] = False
                 values["cc_contact_center_record"] = True
@@ -186,7 +177,7 @@ class CrmLeadQueue(models.Model):
                 and values.get("campaign_id")
                 and "cross_campaign_duplicate" not in values
             ):
-                values["cross_campaign_duplicate"] = self.sudo()._queue_has_cross_campaign_duplicate(
+                values["cross_campaign_duplicate"] = self._queue_has_cross_campaign_duplicate(
                     values["campaign_id"],
                     _phone_key(values.get("phone")),
                     _email_key(values.get("email_from")),
@@ -202,6 +193,9 @@ class CrmLeadQueue(models.Model):
             if operational_membership and record.user_id == self.env.user:
                 source = "manual_agent_creation"
                 reason = _("Lead created by the assigned agent.")
+            elif operational_membership and operational_membership.role == "supervisor":
+                source = "manual_supervisor_creation"
+                reason = _("Lead created with a supervisor-selected campaign agent.")
             elif _is_global_admin(self.env.user):
                 source = "admin"
                 reason = _("Lead created with an administrator assignment.")
@@ -229,15 +223,6 @@ class CrmLeadQueue(models.Model):
                 if forbidden:
                     raise AccessError(
                         _("The queue service may update only controlled queue fields.")
-                    )
-            elif (
-                self.env.su and self.env.context.get("_cc_crm_transition_capability")
-                is CRM_TRANSITION_CAPABILITY
-            ):
-                forbidden = set(values) - TRANSITION_CONTROLLED_FIELDS
-                if forbidden:
-                    raise AccessError(
-                        _("The transition service may update only governed status fields.")
                     )
             else:
                 raise AccessError(
@@ -380,36 +365,47 @@ class CrmLeadQueue(models.Model):
     def _queue_has_cross_campaign_duplicate(
         self, campaign_id, normalized_phone=False, normalized_email=False
     ):
+        campaign = self.env["cc.campaign"].browse(campaign_id).exists()
+        if not campaign:
+            raise ValidationError(_("A valid source campaign is required."))
+        campaign.check_access("read")
+        company = campaign.cc_business_unit_id.company_id
+        if company not in self.env.companies:
+            raise AccessError(_("The source campaign is outside the allowed companies."))
         if normalized_phone:
             self.env.cr.execute(
                 """
                     SELECT 1
-                      FROM crm_lead
-                     WHERE campaign_id IS NOT NULL
-                       AND campaign_id != %s
-                       AND cc_contact_center_record IS TRUE
-                       AND active IS TRUE
+                      FROM crm_lead AS lead
+                      JOIN call_center_business_unit AS unit ON unit.id = lead.business_unit_id
+                     WHERE unit.company_id = %s
+                       AND lead.campaign_id IS NOT NULL
+                       AND lead.campaign_id != %s
+                       AND lead.cc_contact_center_record IS TRUE
+                       AND lead.active IS TRUE
                        AND regexp_replace(
-                           COALESCE(normalized_phone, phone_sanitized, phone, ''),
+                           COALESCE(lead.normalized_phone, lead.phone_sanitized, lead.phone, ''),
                            '[^0-9]', '', 'g'
                        ) = %s
                      LIMIT 1
                 """,
-                [campaign_id, normalized_phone],
+                [company.id, campaign_id, normalized_phone],
             )
         elif normalized_email:
             self.env.cr.execute(
                 """
                     SELECT 1
-                      FROM crm_lead
-                     WHERE campaign_id IS NOT NULL
-                       AND campaign_id != %s
-                       AND cc_contact_center_record IS TRUE
-                       AND active IS TRUE
-                       AND lower(COALESCE(normalized_email, email_from, '')) = %s
+                      FROM crm_lead AS lead
+                      JOIN call_center_business_unit AS unit ON unit.id = lead.business_unit_id
+                     WHERE unit.company_id = %s
+                       AND lead.campaign_id IS NOT NULL
+                       AND lead.campaign_id != %s
+                       AND lead.cc_contact_center_record IS TRUE
+                       AND lead.active IS TRUE
+                       AND lower(COALESCE(lead.normalized_email, lead.email_from, '')) = %s
                      LIMIT 1
                 """,
-                [campaign_id, normalized_email],
+                [company.id, campaign_id, normalized_email],
             )
         else:
             return False
@@ -575,6 +571,12 @@ class CrmLeadQueue(models.Model):
     def action_callcenter_release_to_queue(self, reason=False):
         if not _is_call_center_super_user(self.env.user):
             raise AccessError(_("Only the Call Center Super User may release leads."))
+        # Validate the entire caller-visible selection before elevating any row.
+        self.check_access("read")
+        self.check_access("write")
+        if any(not lead.cc_contact_center_record or not lead.campaign_id for lead in self):
+            raise ValidationError(_("Only governed campaign leads may return to the queue."))
+        self.mapped("campaign_id").check_access("read")
         for lead in self:
             lead.sudo().with_context(
                 _cc_lead_queue_capability=QUEUE_SYSTEM_CAPABILITY
@@ -650,6 +652,9 @@ class CallcenterLeadImportBatch(models.Model):
 
     def action_validate(self):
         _require_global_admin(self.env)
+        self.check_access("read")
+        self.check_access("write")
+        self.mapped("campaign_id").check_access("read")
         for batch in self:
             batch.ensure_one()
             raw = base64.b64decode(batch.upload_file or b"")
@@ -735,7 +740,7 @@ class CallcenterLeadImportBatch(models.Model):
 
                 cross_campaign = False
                 if status == "valid":
-                    cross_campaign = self.env["crm.lead"].sudo()._queue_has_cross_campaign_duplicate(
+                    cross_campaign = self.env["crm.lead"]._queue_has_cross_campaign_duplicate(
                         batch.campaign_id.id,
                         normalized_phone,
                         normalized_email,
@@ -771,6 +776,9 @@ class CallcenterLeadImportBatch(models.Model):
 
     def action_import(self):
         _require_global_admin(self.env)
+        self.check_access("read")
+        self.check_access("write")
+        self.mapped("campaign_id").check_access("read")
         for batch in self:
             if batch.state != "validated":
                 raise ValidationError(_("Validate the import batch before confirming import."))
@@ -968,6 +976,7 @@ class CallcenterLeadAssignment(models.Model):
             ("queue", "Queue"),
             ("admin", "Administrator"),
             ("manual_agent_creation", "Manual Agent Creation"),
+            ("manual_supervisor_creation", "Manual Supervisor Creation"),
             ("transfer", "Transfer"),
         ],
         required=True,

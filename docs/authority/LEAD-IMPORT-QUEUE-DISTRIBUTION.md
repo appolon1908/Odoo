@@ -11,7 +11,7 @@ This implementation extends the canonical `crm.lead` record inside `codestra_cc_
 
 ## Import authority
 
-Only `codestra_cc_security.group_cc_global_administrator` (the Call Center Super User) may create, validate, or confirm lead-import batches.
+Only the dedicated `codestra_cc_security.group_cc_call_center_superuser` role may create, validate, or confirm lead-import batches. The global administrator and technical administrator roles alone do not grant this authority.
 
 The older `codestra_lead_ingestion` addon remains available for its compliance, outbox, and reconciliation history, but its manual batch creation/upload/import path is also gated by the same Call Center Super User authority. Its automatic approved-batch import cron is intentionally a no-op, so it cannot bypass manual confirmation.
 
@@ -23,7 +23,9 @@ Same-campaign duplicate checks use, in order:
 2. normalized/sanitized phone;
 3. normalized email only when no usable phone exists.
 
-A matching customer in a different campaign is permitted and marks `cross_campaign_duplicate=True`.
+A matching customer in a different campaign in the source campaign's company is permitted and marks `cross_campaign_duplicate=True`. Matches in other companies never affect this indicator. The source campaign must be readable in the caller's allowed companies before lookup; validation and confirmation preflight access to every batch campaign.
+
+Only the dedicated import authority may supply `source_batch_id` during lead creation, including through context defaults. Operational callers cannot attach leads to import audit batches.
 
 ## Lead pool
 
@@ -60,7 +62,7 @@ The lead-row lock prevents two concurrent agents from receiving the same lead. T
 
 ## Saved-lead lock
 
-After creation, normal agent, supervisor, and service writes to governed lead data are rejected. The Call Center Super User may correct lead data. Internal queue methods use an in-process capability object that cannot be supplied through normal RPC and are limited to controlled fields:
+After creation, normal agent, supervisor, and service writes to governed lead data are rejected. The Call Center Super User may correct lead data. Internal queue methods require both `sudo` and an in-process capability object that cannot be supplied through normal RPC, and are limited to controlled fields:
 
 - `user_id`;
 - `queue_state`;
@@ -68,7 +70,11 @@ After creation, normal agent, supervisor, and service writes to governed lead da
 - `call_attempt_count`;
 - `last_call_at`.
 
-Governed workflow transitions use their existing private transition capability. Campaign transfer remains a separate Super-User-governed operation.
+The queue capability cannot modify source data, campaign scope, workflow status, or archive state. Neither ordinary `sudo` nor a scope/transition capability bypasses the saved-source lock. Campaign transfer remains a separate Super-User-governed operation.
+
+Manual agent-created leads are assigned to their creator. Supervisors may select an active agent or senior agent in their campaign before the first save; without an explicit assignee, the lead enters the unassigned available pool. Supervisors cannot become lead owners or reassign saved leads.
+
+The saved call-center classification cannot be cleared, and source-list corrections must remain nonblank. Queue release checks read/write access and governed campaign scope for the complete selection before any elevated mutation, so mixed authorized/unauthorized selections leave every lead and assignment history unchanged.
 
 ## One working lead
 
@@ -77,5 +83,7 @@ An agent cannot receive a second normal lead while another lead is `assigned` to
 ## Audit
 
 `callcenter.lead.assignment` records assignment source, actor, agent, campaign, assigned time, release time, and reason. The record is append-only except for the one-time release finalization performed by the internal queue service.
+
+An explicit supervisor assignment at creation records `manual_supervisor_creation` with that supervisor as the actor and the selected agent as the owner. Creating an unassigned pool lead creates no assignment-history entry until assignment occurs.
 
 Import batches are retained and cannot be deleted.

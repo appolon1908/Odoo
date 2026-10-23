@@ -367,6 +367,14 @@ class CrmLead(models.Model):
     @api.model_create_multi
     def create(self, values_list):
         prepared = []
+        operational_creation = _is_operational(self.env.user) and not _is_global_admin(
+            self.env.user
+        )
+        membership = (
+            self.env.user._cc_resolve_operational_membership()
+            if operational_creation
+            else self.env["cc.campaign.membership"]
+        )
         for original in values_list:
             values = dict(original)
             profile = self.env["cc.customer.profile"]
@@ -377,6 +385,32 @@ class CrmLead(models.Model):
                 if not profile:
                     raise ValidationError(_("The campaign customer profile does not exist."))
                 profile.check_access("read")
+
+            if operational_creation:
+                active_campaign = membership.campaign_id
+                supplied_campaign_id = values.get("campaign_id")
+                if supplied_campaign_id and supplied_campaign_id != active_campaign.id:
+                    raise AccessError(
+                        _("The active campaign is assigned automatically during lead creation.")
+                    )
+                if membership.role in {"agent", "senior_agent"}:
+                    supplied_user_id = values.get("user_id")
+                    if supplied_user_id and supplied_user_id != self.env.user.id:
+                        raise AccessError(
+                            _("Agents cannot create leads assigned to another user.")
+                        )
+                    values["user_id"] = self.env.user.id
+                elif not values.get("user_id"):
+                    # Supervisors manage the campaign pool; only active agents
+                    # may own a lead. Suppress Odoo's default current-user owner.
+                    values["user_id"] = False
+                values["campaign_id"] = active_campaign.id
+                values["cc_contact_center_record"] = True
+                if not str(values.get("cc_source_list_key") or "").strip():
+                    values["cc_source_list_key"] = (
+                        f"manual:odoo:user:{self.env.user.id}"
+                    )
+
             governed = bool(
                 values.get("cc_contact_center_record")
                 or values.get("campaign_id")
@@ -399,15 +433,6 @@ class CrmLead(models.Model):
                         "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
                     }
                 )
-                if (
-                    _is_operational(self.env.user)
-                    and not _is_supervisor(self.env.user)
-                    and not _is_global_admin(self.env.user)
-                ):
-                    requested_user_id = values.get("user_id")
-                    if requested_user_id and requested_user_id != self.env.user.id:
-                        raise AccessError(_("Agents may create leads only for themselves."))
-                    values["user_id"] = self.env.user.id
                 if values.get("user_id"):
                     target_user = self.env["res.users"].browse(values["user_id"]).exists()
                     if not target_user:
@@ -418,6 +443,8 @@ class CrmLead(models.Model):
 
     def write(self, values):
         governed = self.filtered("cc_contact_center_record")
+        if governed and "cc_contact_center_record" in values and not values["cc_contact_center_record"]:
+            raise AccessError(_("Saved campaign CRM records cannot disable governance."))
         is_super_user = _is_call_center_super_user(self.env.user)
         # Operational queue allocation is limited to a private in-process token,
         # system elevation, and known queue fields. Human/API supplied context
@@ -433,10 +460,12 @@ class CrmLead(models.Model):
                 _("Saved lead source fields require the dedicated Call Center Super User.")
             )
         values = dict(values)
-        if governed and is_super_user and values.get("campaign_id"):
+        if governed and is_super_user and "campaign_id" in values:
             campaign = self.env["cc.campaign"].browse(values["campaign_id"]).exists()
             if not campaign:
-                raise ValidationError(_("The target campaign does not exist."))
+                raise ValidationError(
+                    _("Saved call-center leads must remain assigned to a valid campaign.")
+                )
             values.update({
                 "call_center_campaign_id": campaign.legacy_campaign_id.id,
                 "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
@@ -453,20 +482,6 @@ class CrmLead(models.Model):
             ) is not CRM_SCOPE_MIGRATION_CAPABILITY:
                 raise AccessError(_("CRM campaign ownership is immutable."))
 
-        if governed and "active" in values:
-            if is_super_user:
-                pass
-            elif _is_supervisor(self.env.user):
-                if values["active"] is not False:
-                    raise AccessError(
-                        _("Supervisors may archive, but only the Call Center Super User may restore leads.")
-                    )
-                supervised_ids = set(self.env.user.cc_supervised_campaign_ids.ids)
-                if any(lead.campaign_id.id not in supervised_ids for lead in governed):
-                    raise AccessError(_("Supervisors may archive only their supervised campaigns."))
-            elif _is_operational(self.env.user):
-                raise AccessError(_("Agents cannot archive call-center leads."))
-
         reassignment_fields = {
             "user_id",
             "assigned_agent_profile_id",
@@ -474,14 +489,16 @@ class CrmLead(models.Model):
             "codestra_supervisor_id",
         }
         if (
-            _is_operational(self.env.user)
+            not is_super_user
+            and _is_operational(self.env.user)
             and not _is_supervisor(self.env.user)
             and not queue_operation
             and reassignment_fields.intersection(values)
         ):
             raise AccessError(_("Agents cannot reassign campaign CRM ownership."))
         if (
-            _is_operational(self.env.user)
+            not is_super_user
+            and _is_operational(self.env.user)
             and not _is_supervisor(self.env.user)
             and "team_id" in values
         ):
@@ -511,23 +528,7 @@ class CrmLead(models.Model):
                 assignment_campaign = transfer_campaign or lead.campaign_id
                 _validate_agent_assignment(self.env, assignment_campaign, target_user)
 
-        if governed and _is_supervisor(self.env.user) and "user_id" in values:
-            supervised_ids = set(self.env.user.cc_supervised_campaign_ids.ids)
-            if any(lead.campaign_id.id not in supervised_ids for lead in governed):
-                raise AccessError(_("Supervisors may reassign only their supervised campaigns."))
-
-        if governed and _is_supervisor(self.env.user) and "team_id" in values:
-            for lead in governed:
-                target_team = self.env["crm.team"].browse(values["team_id"]).exists()
-                if (
-                    target_team
-                    and target_team not in lead.campaign_id.legacy_campaign_id.team_ids
-                ):
-                    raise AccessError(
-                        _("Supervisors cannot move leads to another campaign team.")
-                    )
-
-        if _is_operational(self.env.user) and {
+        if not is_super_user and _is_operational(self.env.user) and {
             "codestra_workflow_id",
             "codestra_current_status_id",
             "codestra_previous_status_id",
@@ -536,7 +537,7 @@ class CrmLead(models.Model):
             "_cc_crm_transition_capability"
         ) is not CRM_TRANSITION_CAPABILITY:
             raise AccessError(_("Campaign CRM status requires the governed transition."))
-        if _is_operational(self.env.user) and {
+        if not is_super_user and _is_operational(self.env.user) and {
             "partner_id",
             "business_unit_id",
             "call_center_campaign_id",
@@ -679,6 +680,7 @@ class CrmLead(models.Model):
         "campaign_id",
         "cc_customer_profile_id",
         "cc_contact_center_record",
+        "cc_source_list_key",
         "call_center_campaign_id",
         "business_unit_id",
         "user_id",

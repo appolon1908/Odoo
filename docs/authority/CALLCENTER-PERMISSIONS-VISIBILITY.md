@@ -8,7 +8,7 @@ The simplified external role names resolve to the canonical Codestra groups:
 | --- | --- |
 | `callcenter.group_callcenter_agent` | `codestra_cc_security.group_cc_campaign_agent` |
 | `callcenter.group_callcenter_supervisor` | `codestra_cc_security.group_cc_campaign_supervisor` |
-| `callcenter.group_callcenter_superuser` | `codestra_cc_security.group_cc_global_administrator` |
+| `callcenter.group_callcenter_superuser` | `codestra_cc_security.group_cc_call_center_superuser` |
 
 The compatibility IDs are aliases, not a second RBAC system. Supervisor capability is a superset of Agent capability in the existing operational hierarchy. The operational Call Center Super User has global call-center authority but does **not** imply `base.group_system` or the technical-administrator group.
 
@@ -31,7 +31,7 @@ Assignment is enforced in Python in addition to record rules. A target lead owne
 
 Agents cannot change lead ownership to another user and cannot change `team_id`. Agent-created governed CRM leads are automatically assigned to the creating agent.
 
-Supervisors can assign or bulk-assign leads only inside campaigns they supervise. Cross-campaign changes through normal `write()` remain denied.
+Before the first save, supervisors may select an active agent or senior agent in their campaign. A missing assignee creates an unassigned available pool lead. After saving, supervisors cannot assign, bulk-assign, or otherwise edit the source record. The private queue path requires system elevation and a non-RPC capability, and may update only its five documented queue fields; source edits remain denied.
 
 Only the operational Call Center Super User can use the governed `action_callcenter_transfer_campaign()` method. The method validates the target campaign, target agent, target customer profile and optional CRM team before changing campaign ownership.
 
@@ -40,9 +40,9 @@ Only the operational Call Center Super User can use the governed `action_callcen
 Normal physical deletion of governed call-center leads is denied. The operational Super User's CRM ACL has `perm_unlink=0`, and the model also denies ordinary `unlink()`.
 
 - Agent: cannot archive or restore.
-- Supervisor: may archive leads only in supervised campaigns; cannot restore.
+- Supervisor: cannot archive or restore.
 - Call Center Super User: may archive and restore.
-- Technical administrator: deletion is available only through the private maintenance method `_callcenter_maintenance_unlink()`, which requires `base.group_system`; it is not a normal UI/RPC operation.
+- Technical administrator: cannot edit, archive, restore, or delete saved leads without the dedicated saved-lead authority; deletion remains denied even with that role.
 
 ## Exports and reporting
 
