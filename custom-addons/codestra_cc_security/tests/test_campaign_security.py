@@ -179,6 +179,22 @@ class TestCampaignSecurity(TransactionCase):
         self.assertFalse(
             self.requester.has_group("call_center_core.group_call_center_admin")
         )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_agent"),
+            self.env.ref("codestra_cc_security.group_cc_campaign_agent"),
+        )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_supervisor"),
+            self.env.ref("codestra_cc_security.group_cc_campaign_supervisor"),
+        )
+        self.assertEqual(
+            self.env.ref("callcenter.group_callcenter_superuser"),
+            self.env.ref("codestra_cc_security.group_cc_global_administrator"),
+        )
+        self.assertFalse(
+            self.requester.has_group("base.group_system"),
+            "Operational Call Center Super User must not imply Odoo system administration.",
+        )
 
     def test_partial_unique_indexes_are_installed(self):
         rows = self.env.execute_query(
@@ -245,6 +261,33 @@ class TestCampaignSecurity(TransactionCase):
             {self.agent_membership.id, self.supervisor_membership.id},
         )
         self.assertNotIn(self.other_membership, supervisor_visible)
+
+
+    def test_backup_supervisor_has_supervised_campaign_visibility(self):
+        backup = self._create_user(
+            "Backup Supervisor",
+            "backup-supervisor@example.invalid",
+            "codestra_cc_security.group_cc_campaign_supervisor",
+        )
+        backup_employee = self._create_employee(backup)
+        backup_membership = self._activate_membership(
+            backup,
+            backup_employee,
+            self.campaign_a,
+            "supervisor",
+            primary=False,
+        )
+        self.assertFalse(backup_membership.is_primary_supervisor)
+        self.assertEqual(backup.cc_supervised_campaign_ids, self.campaign_a)
+        self.assertEqual(
+            self.campaign_a.primary_supervisor_membership_id,
+            self.supervisor_membership,
+        )
+        visible = self.Membership.with_user(backup).search([])
+        self.assertIn(self.agent_membership, visible)
+        self.assertIn(self.supervisor_membership, visible)
+        self.assertIn(backup_membership, visible)
+        self.assertNotIn(self.other_membership, visible)
 
     def test_exact_one_operational_membership_is_enforced(self):
         second = self.Membership.with_user(self.requester).create(

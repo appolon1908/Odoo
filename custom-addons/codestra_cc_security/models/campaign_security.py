@@ -98,7 +98,6 @@ class ResUsers(models.Model):
             )
             supervisor_memberships = active_memberships.filtered(
                 lambda membership: membership.role == "supervisor"
-                and membership.is_primary_supervisor
             )
             user.cc_supervised_campaign_ids = supervisor_memberships.mapped(
                 "campaign_id"
@@ -200,7 +199,15 @@ class CcCampaignMembership(models.Model):
     )
     starts_at = fields.Datetime(copy=False)
     ends_at = fields.Datetime(copy=False)
-    is_primary_supervisor = fields.Boolean(default=False, copy=False, index=True)
+    is_primary_supervisor = fields.Boolean(
+        default=False,
+        copy=False,
+        index=True,
+        help=(
+            "Primary supervisor when enabled. An active supervisor membership "
+            "without this flag is a backup supervisor."
+        ),
+    )
     requested_by_id = fields.Many2one(
         "res.users",
         required=True,
@@ -320,12 +327,7 @@ class CcCampaignMembership(models.Model):
             if membership.ends_at and membership.starts_at:
                 if membership.ends_at <= membership.starts_at:
                     raise ValidationError(_("Membership expiry must follow its start."))
-            if membership.role == "supervisor":
-                if membership.state == "active" and not membership.is_primary_supervisor:
-                    raise ValidationError(
-                        _("An active supervisor must be the campaign's primary supervisor.")
-                    )
-            elif membership.is_primary_supervisor:
+            if membership.role != "supervisor" and membership.is_primary_supervisor:
                 raise ValidationError(
                     _("Only a supervisor can be marked as primary supervisor.")
                 )
@@ -371,7 +373,7 @@ class CcCampaignMembership(models.Model):
                     raise ValidationError(
                         _("A user may hold only one active operational membership.")
                     )
-                if membership.role == "supervisor":
+                if membership.role == "supervisor" and membership.is_primary_supervisor:
                     duplicate_supervisor = self.search_count(
                         [
                             ("campaign_id", "=", membership.campaign_id.id),
@@ -426,7 +428,10 @@ class CcCampaignMembership(models.Model):
                 raise ValidationError(
                     _("A user may hold only one active operational membership.")
                 )
-            if membership.role == "supervisor" and self.search_count(
+            if (
+                membership.role == "supervisor"
+                and membership.is_primary_supervisor
+                and self.search_count(
                 [
                     ("campaign_id", "=", membership.campaign_id.id),
                     ("state", "=", "active"),
@@ -435,6 +440,7 @@ class CcCampaignMembership(models.Model):
                     ("id", "!=", membership.id),
                 ],
                 limit=1,
+                )
             ):
                 raise ValidationError(
                     _("A campaign may have only one active primary supervisor.")
