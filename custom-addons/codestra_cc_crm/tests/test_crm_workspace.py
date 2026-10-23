@@ -679,16 +679,16 @@ class TestCampaignCrmWorkspace(TransactionCase):
             (local_line, foreign_line, ["raw_data", "normalized_phone"], "batch_id", "normalized_phone"),
             (local_assignment, foreign_assignment, ["reason", "agent_id"], "campaign_id", "reason"),
         )
+        export_group = self.env.ref("base.group_allow_export")
         for actor in (self.call_center_superuser, self.requester):
             self.assertNotIn(company, actor.company_ids)
             for local, foreign, private_fields, group_field, export_field in cases:
-                with self.subTest(actor=actor.login, model=local._name):
+                with self.subTest(actor=actor.login, model=local._name, surface="read"):
                     Model = self.env[local._name].with_user(actor)
                     self.assertFalse(Model.env.su)
                     local_scoped = Model.browse(local.id)
                     foreign_scoped = Model.browse(foreign.id)
                     self.assertEqual(local_scoped.read(private_fields)[0]["id"], local.id)
-                    self.assertEqual(len(local_scoped.export_data([export_field])["datas"]), 1)
                     self.assertFalse(Model.search([("id", "=", foreign.id)]))
                     rows = Model.search_read([("id", "in", [local.id, foreign.id])], private_fields)
                     self.assertEqual([row["id"] for row in rows], [local.id])
@@ -702,6 +702,26 @@ class TestCampaignCrmWorkspace(TransactionCase):
                     self.assertEqual(sum(row["record_count"] for row in grouped), 1)
                     with self.assertRaises(AccessError):
                         foreign_scoped.read(private_fields)
+
+            # These roles do not grant Odoo's separate export capability.
+            self.assertFalse(actor.has_group("base.group_allow_export"))
+            for local, _foreign, _fields, _group, export_field in cases:
+                with self.subTest(actor=actor.login, model=local._name, surface="default_export"):
+                    with self.assertRaisesRegex(UserError, "rights to export data"):
+                        local.with_user(actor).export_data([export_field])
+
+            # Grant only this test user the standard export capability to test
+            # record-rule enforcement after the independent export gate passes.
+            actor.sudo().write({"group_ids": [(4, export_group.id)]})
+            self.assertTrue(actor.has_group("base.group_allow_export"))
+            for local, foreign, _fields, _group, export_field in cases:
+                with self.subTest(actor=actor.login, model=local._name, surface="scoped_export"):
+                    Model = self.env[local._name].with_user(actor)
+                    self.assertFalse(Model.env.su)
+                    self.assertFalse(Model.env.is_admin())
+                    local_scoped = Model.browse(local.id)
+                    foreign_scoped = Model.browse(foreign.id)
+                    self.assertEqual(len(local_scoped.export_data([export_field])["datas"]), 1)
                     with self.assertRaises(AccessError):
                         foreign_scoped.export_data([export_field])
                     with self.assertRaises(AccessError):
