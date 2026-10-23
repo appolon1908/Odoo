@@ -15,8 +15,9 @@ For active operational memberships, lead creation is server-derived.
 
 - campaign: the creator's single active reconciled campaign membership;
 - assigned user: the current user for agents and senior agents;
-- supervisor creation: defaults to the current supervisor but may assign a user
-  from the same campaign before the first save;
+- supervisor creation: an explicit assignee must be an active agent or senior
+  agent in the same campaign; a missing or false assignee creates an unassigned
+  `available` pool lead, never a supervisor-owned lead;
 - creator/date: native Odoo `create_uid` and `create_date`;
 - provenance: missing manual source keys default to
   `manual:odoo:user:<uid>`.
@@ -26,8 +27,9 @@ rejects those attempts before persistence.
 
 ## Post-save lock
 
-Any saved call-center lead (`cc_contact_center_record=True`) is immutable for
-all callers except the Call Center Super User. The guard is in
+The source fields of every saved call-center lead
+(`cc_contact_center_record=True`) are immutable for all callers except the
+Call Center Super User. The guard is in
 `crm.lead.write()`, so it applies to forms, list editing, imports, RPC/API,
 automations, and bulk writes.
 
@@ -39,14 +41,28 @@ The Call Center Super User may correct or archive a lead. Campaign changes keep
 the canonical/legacy campaign and business-unit fields synchronized and remain
 subject to cross-model consistency constraints.
 
+Saved call-center classification cannot be removed, even by the Super User or
+an elevated process. Source-list corrections must remain nonblank; the provenance
+constraint also runs when only the source-list field changes.
+
 ## Delete and archive
 
 Call-center leads remain non-deletable for every role. Archive is a write
 (`active=False`) and therefore is denied to agents/supervisors and permitted to
 the Call Center Super User.
 
-## Call history exception
+## Queue and call history
 
 The lead is the original source record. Call attempts, activities, dispositions,
 and later call outcomes must be stored as separate history/operation records.
-No context flag or automation capability bypasses the saved-lead write lock.
+The queue's private in-process capability is the only system exception. It
+requires `sudo` and permits only `user_id`, `queue_state`, `next_eligible_at`,
+`call_attempt_count`, and `last_call_at`. It cannot change source fields, campaign
+ownership, workflow status, or archive state. Assignment still requires an active
+agent or senior-agent membership in the lead's campaign. Public context values,
+ordinary `sudo`, and scope/transition capabilities do not bypass this lock.
+
+This reconciles the creation policy with the queue assignment invariant: a
+supervisor creates pool work or selects an eligible agent before the first save;
+afterward only the dedicated Super User or the bounded queue operation can change
+assignment. Call history remains in separate operation records.

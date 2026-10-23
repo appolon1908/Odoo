@@ -15,6 +15,8 @@ OPERATIONAL_GROUPS = (
 CRM_SCOPE_MIGRATION_CAPABILITY = object()
 CRM_TRANSITION_CAPABILITY = object()
 PROFILE_WRITE_CAPABILITY = object()
+CRM_QUEUE_SYSTEM_CAPABILITY = object()
+CRM_QUEUE_FIELDS = {"user_id", "queue_state", "next_eligible_at", "call_attempt_count", "last_call_at"}
 PROFILE_AGENT_WRITE_FIELDS = {"verification_state", "verification_checklist"}
 PROFILE_SUPERVISOR_WRITE_FIELDS = PROFILE_AGENT_WRITE_FIELDS | {
     "assigned_user_id",
@@ -53,6 +55,23 @@ def _is_call_center_super_user(user):
 
 def _is_supervisor(user):
     return user.has_group("codestra_cc_security.group_cc_campaign_supervisor")
+
+
+def _validate_agent_assignment(env, campaign, user):
+    if not user:
+        return False
+    membership = env["cc.campaign.membership"].sudo().search(
+        [
+            ("user_id", "=", user.id),
+            ("campaign_id", "=", campaign.id),
+            ("state", "=", "active"),
+            ("role", "in", ("agent", "senior_agent")),
+        ],
+        limit=1,
+    )
+    if not membership:
+        raise ValidationError(_("Agent is not assigned to this campaign."))
+    return membership
 
 
 def _mask_email(value):
@@ -283,7 +302,7 @@ class CcCustomerProfile(models.Model):
                     ("user_id", "=", profile.assigned_user_id.id),
                     ("campaign_id", "=", profile.campaign_id.id),
                     ("state", "=", "active"),
-                    ("role", "in", ("agent", "senior_agent", "supervisor")),
+                    ("role", "in", ("agent", "senior_agent")),
                 ],
                 limit=1,
             )
@@ -382,7 +401,9 @@ class CrmLead(models.Model):
                         )
                     values["user_id"] = self.env.user.id
                 elif not values.get("user_id"):
-                    values["user_id"] = self.env.user.id
+                    # Supervisors manage the campaign pool; only active agents
+                    # may own a lead. Suppress Odoo's default current-user owner.
+                    values["user_id"] = False
                 values["campaign_id"] = active_campaign.id
                 values["cc_contact_center_record"] = True
                 if not str(values.get("cc_source_list_key") or "").strip():
@@ -412,88 +433,210 @@ class CrmLead(models.Model):
                         "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
                     }
                 )
+                if values.get("user_id"):
+                    target_user = self.env["res.users"].browse(values["user_id"]).exists()
+                    if not target_user:
+                        raise ValidationError(_("The assigned agent does not exist."))
+                    _validate_agent_assignment(self.env, campaign, target_user)
             prepared.append(values)
         return super().create(prepared)
 
     def write(self, values):
-        saved_call_center_leads = self.filtered("cc_contact_center_record")
-        is_call_center_super_user = _is_call_center_super_user(self.env.user)
-        if saved_call_center_leads and not is_call_center_super_user:
+        governed = self.filtered("cc_contact_center_record")
+        if governed and "cc_contact_center_record" in values and not values["cc_contact_center_record"]:
+            raise AccessError(_("Saved campaign CRM records cannot disable governance."))
+        is_super_user = _is_call_center_super_user(self.env.user)
+        # Operational queue allocation is limited to a private in-process token,
+        # system elevation, and known queue fields. Human/API supplied context
+        # strings never authorize mutation of the saved source record.
+        queue_operation = (
+            self.env.su
+            and self.env.context.get("_cc_lead_queue_capability")
+            is CRM_QUEUE_SYSTEM_CAPABILITY
+            and set(values).issubset(CRM_QUEUE_FIELDS)
+        )
+        if governed and not is_super_user and not queue_operation:
             raise AccessError(
-                _(
-                    "Saved leads can only be modified by a Call Center Super User. "
-                    "Record call attempts, activities, and dispositions in their "
-                    "separate history models."
-                )
+                _("Saved lead source fields require the dedicated Call Center Super User.")
             )
-
         values = dict(values)
-        if (
-            is_call_center_super_user
-            and saved_call_center_leads
-            and "campaign_id" in values
-        ):
+        if governed and is_super_user and "campaign_id" in values:
             campaign = self.env["cc.campaign"].browse(values["campaign_id"]).exists()
             if not campaign:
                 raise ValidationError(
                     _("Saved call-center leads must remain assigned to a valid campaign.")
                 )
-            values.update(
-                {
-                    "call_center_campaign_id": campaign.legacy_campaign_id.id,
-                    "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
-                    "is_codestra_call_center_lead": True,
-                    "cc_contact_center_record": True,
-                }
-            )
-
-        if not is_call_center_super_user and {
+            values.update({
+                "call_center_campaign_id": campaign.legacy_campaign_id.id,
+                "business_unit_id": campaign.cc_business_unit_id.legacy_business_unit_id.id,
+                "is_codestra_call_center_lead": True,
+                "cc_contact_center_record": True,
+            })
+        if {
             "campaign_id",
             "cc_customer_profile_id",
             "cc_source_list_key",
         }.intersection(values):
-            if self.env.context.get(
+            if not is_super_user and self.env.context.get(
                 "_cc_crm_scope_capability"
             ) is not CRM_SCOPE_MIGRATION_CAPABILITY:
                 raise AccessError(_("CRM campaign ownership is immutable."))
+
+        reassignment_fields = {
+            "user_id",
+            "assigned_agent_profile_id",
+            "call_center_supervisor_id",
+            "codestra_supervisor_id",
+        }
         if (
-            not is_call_center_super_user
+            not is_super_user
             and _is_operational(self.env.user)
             and not _is_supervisor(self.env.user)
-            and {
-                "user_id",
-                "assigned_agent_profile_id",
-                "call_center_supervisor_id",
-                "codestra_supervisor_id",
-            }.intersection(values)
+            and not queue_operation
+            and reassignment_fields.intersection(values)
         ):
             raise AccessError(_("Agents cannot reassign campaign CRM ownership."))
         if (
-            not is_call_center_super_user
+            not is_super_user
             and _is_operational(self.env.user)
-            and {
-                "codestra_workflow_id",
-                "codestra_current_status_id",
-                "codestra_previous_status_id",
-                "status_entered_at",
-            }.intersection(values)
-            and self.env.context.get(
-                "_cc_crm_transition_capability"
-            ) is not CRM_TRANSITION_CAPABILITY
+            and not _is_supervisor(self.env.user)
+            and "team_id" in values
         ):
-            raise AccessError(_("Campaign CRM status requires the governed transition."))
+            raise AccessError(_("Agents cannot change the CRM team."))
+
+        transfer_campaign = self.env["cc.campaign"]
         if (
-            not is_call_center_super_user
-            and _is_operational(self.env.user)
-            and {
-                "partner_id",
-                "business_unit_id",
-                "call_center_campaign_id",
-                "is_codestra_call_center_lead",
-            }.intersection(values)
+            governed
+            and values.get("campaign_id")
+            and (is_super_user or self.env.context.get("_cc_crm_scope_capability")
+            is CRM_SCOPE_MIGRATION_CAPABILITY)
         ):
+            transfer_campaign = (
+                self.env["cc.campaign"]
+                .with_context(active_test=False)
+                .browse(values["campaign_id"])
+                .exists()
+            )
+            if not transfer_campaign:
+                raise ValidationError(_("The target campaign does not exist."))
+
+        if governed and "user_id" in values and values.get("user_id"):
+            target_user = self.env["res.users"].browse(values["user_id"]).exists()
+            if not target_user:
+                raise ValidationError(_("The assigned agent does not exist."))
+            for lead in governed:
+                assignment_campaign = transfer_campaign or lead.campaign_id
+                _validate_agent_assignment(self.env, assignment_campaign, target_user)
+
+        if not is_super_user and _is_operational(self.env.user) and {
+            "codestra_workflow_id",
+            "codestra_current_status_id",
+            "codestra_previous_status_id",
+            "status_entered_at",
+        }.intersection(values) and self.env.context.get(
+            "_cc_crm_transition_capability"
+        ) is not CRM_TRANSITION_CAPABILITY:
+            raise AccessError(_("Campaign CRM status requires the governed transition."))
+        if not is_super_user and _is_operational(self.env.user) and {
+            "partner_id",
+            "business_unit_id",
+            "call_center_campaign_id",
+            "is_codestra_call_center_lead",
+        }.intersection(values):
             raise AccessError(_("Operational users cannot bypass the customer profile."))
         return super().write(values)
+
+    def action_callcenter_assign_agent(self, target_user_id):
+        if not _is_call_center_super_user(self.env.user):
+            raise AccessError(_("Only the dedicated Call Center Super User may assign saved leads."))
+        target_user = self.env["res.users"].browse(target_user_id).exists()
+        if not target_user:
+            raise ValidationError(_("The assigned agent does not exist."))
+        for lead in self.filtered("cc_contact_center_record"):
+            _validate_agent_assignment(self.env, lead.campaign_id, target_user)
+        return self.write({"user_id": target_user.id})
+
+    def action_callcenter_transfer_campaign(
+        self,
+        target_campaign_id,
+        target_user_id=False,
+        target_profile_id=False,
+        target_team_id=False,
+    ):
+        if not _is_call_center_super_user(self.env.user):
+            raise AccessError(
+                _("Only the Call Center Super User may transfer leads between campaigns.")
+            )
+        self.ensure_one()
+        if not self.cc_contact_center_record:
+            raise ValidationError(_("Only governed call-center leads use campaign transfer."))
+
+        target_campaign = (
+            self.env["cc.campaign"]
+            .with_context(active_test=False)
+            .browse(target_campaign_id)
+            .exists()
+        )
+        if not target_campaign:
+            raise ValidationError(_("The target campaign does not exist."))
+
+        target_user = self.env["res.users"]
+        if target_user_id:
+            target_user = self.env["res.users"].browse(target_user_id).exists()
+            if not target_user:
+                raise ValidationError(_("The target agent does not exist."))
+            _validate_agent_assignment(self.env, target_campaign, target_user)
+
+        target_profile = self.env["cc.customer.profile"]
+        if target_profile_id:
+            target_profile = (
+                self.env["cc.customer.profile"]
+                .with_context(active_test=False)
+                .browse(target_profile_id)
+                .exists()
+            )
+            if not target_profile or target_profile.campaign_id != target_campaign:
+                raise ValidationError(
+                    _("The target customer profile must belong to the target campaign.")
+                )
+        elif self.cc_customer_profile_id:
+            raise ValidationError(
+                _("A target-campaign customer profile is required for this lead.")
+            )
+
+        target_team = self.env["crm.team"]
+        if target_team_id:
+            target_team = self.env["crm.team"].browse(target_team_id).exists()
+            if (
+                not target_team
+                or target_team not in target_campaign.legacy_campaign_id.team_ids
+            ):
+                raise ValidationError(_("The CRM team is not assigned to the target campaign."))
+
+        values = {
+            "campaign_id": target_campaign.id,
+            "call_center_campaign_id": target_campaign.legacy_campaign_id.id,
+            "business_unit_id": target_campaign.cc_business_unit_id.legacy_business_unit_id.id,
+            "cc_customer_profile_id": target_profile.id if target_profile else False,
+            "user_id": target_user.id if target_user else False,
+            "team_id": target_team.id if target_team else False,
+        }
+        for field_name in (
+            "assigned_agent_profile_id",
+            "call_center_supervisor_id",
+            "codestra_supervisor_id",
+            "codestra_workflow_id",
+            "codestra_current_status_id",
+            "codestra_previous_status_id",
+            "status_entered_at",
+        ):
+            if field_name in self._fields:
+                values[field_name] = False
+
+        self.with_context(
+            _cc_crm_scope_capability=CRM_SCOPE_MIGRATION_CAPABILITY
+        ).write(values)
+        return True
 
     def action_codestra_transition(
         self,
@@ -523,7 +666,7 @@ class CrmLead(models.Model):
 
     def unlink(self):
         if any(self.mapped("cc_contact_center_record")):
-            raise AccessError(_("Campaign CRM leads are retained, not deleted."))
+            raise AccessError(_("Saved call-center leads cannot be deleted by any role."))
         return super().unlink()
 
     def export_data(self, fields_to_export, raw_data=False):
@@ -537,6 +680,7 @@ class CrmLead(models.Model):
         "campaign_id",
         "cc_customer_profile_id",
         "cc_contact_center_record",
+        "cc_source_list_key",
         "call_center_campaign_id",
         "business_unit_id",
         "user_id",
@@ -568,7 +712,7 @@ class CrmLead(models.Model):
                         ("user_id", "=", lead.user_id.id),
                         ("campaign_id", "=", lead.campaign_id.id),
                         ("state", "=", "active"),
-                        ("role", "in", ("agent", "senior_agent", "supervisor")),
+                        ("role", "in", ("agent", "senior_agent")),
                     ],
                     limit=1,
                 )
