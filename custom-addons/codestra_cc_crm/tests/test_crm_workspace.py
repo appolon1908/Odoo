@@ -305,14 +305,81 @@ class TestCampaignCrmWorkspace(TransactionCase):
     def test_archive_and_delete_policy_is_role_enforced(self):
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.agent_a).action_archive()
+        with self.assertRaises(AccessError):
+            self.lead_b.with_user(self.supervisor_a).action_archive()
+        with self.assertRaises(AccessError):
+            (self.lead_a | self.lead_b).with_user(self.supervisor_a).action_archive()
+        self.assertTrue(self.lead_a.active)
+        self.assertTrue(self.lead_b.active)
         self.lead_a.with_user(self.supervisor_a).action_archive()
         self.assertFalse(self.lead_a.active)
+        self.assertEqual(self.lead_a.write_uid, self.supervisor_a)
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.supervisor_a).action_unarchive()
         self.lead_a.with_user(self.requester).action_unarchive()
         self.assertTrue(self.lead_a.active)
+        self.assertEqual(self.lead_a.write_uid, self.requester)
         with self.assertRaises(AccessError):
             self.lead_a.with_user(self.requester).unlink()
+
+    def test_archive_updates_scoring_without_granting_frequency_access(self):
+        self.env["ir.config_parameter"].set_param("crm.pls_start_date", "2000-01-01")
+        self.lead_a.write({"probability": 0})
+        self.assertTrue(self.lead_a.stage_id)
+        Frequency = self.env["crm.lead.scoring.frequency"]
+        frequency = Frequency.search(
+            [
+                ("variable", "=", "stage_id"),
+                ("value", "=", str(self.lead_a.stage_id.id)),
+                ("team_id", "=", self.lead_a.team_id.id),
+            ],
+            limit=1,
+        )
+        if not frequency:
+            frequency = Frequency.create(
+                {
+                    "variable": "stage_id",
+                    "value": str(self.lead_a.stage_id.id),
+                    "team_id": self.lead_a.team_id.id,
+                    "won_count": 0.1,
+                    "lost_count": 0.1,
+                }
+            )
+        lost_count = frequency.lost_count
+        won_count = frequency.won_count
+        for user in (self.agent_a, self.supervisor_a, self.requester):
+            with self.assertRaises(AccessError):
+                frequency.with_user(user).read(["lost_count"])
+
+        self.lead_a.with_user(self.supervisor_a).action_archive()
+        self.assertFalse(self.lead_a.active)
+        self.assertAlmostEqual(frequency.lost_count, lost_count + 1)
+        self.assertAlmostEqual(frequency.won_count, won_count)
+
+        self.lead_a.with_user(self.requester).action_unarchive()
+        self.assertTrue(self.lead_a.active)
+        self.assertAlmostEqual(frequency.lost_count, lost_count)
+        self.assertAlmostEqual(frequency.won_count, won_count)
+
+    def test_ordinary_lead_scoring_keeps_caller_permissions(self):
+        self.env["ir.config_parameter"].set_param("crm.pls_start_date", "2000-01-01")
+        ordinary = self.Lead.create(
+            {
+                "name": "Ordinary CRM scoring permissions",
+                "type": "opportunity",
+                "user_id": False,
+                "team_id": False,
+                "probability": 0,
+            }
+        )
+        self.assertFalse(ordinary.cc_contact_center_record)
+        for leads in (ordinary, ordinary | self.lead_a):
+            with self.assertRaisesRegex(
+                AccessError, r"crm\.lead\.scoring\.frequency"
+            ), self.cr.savepoint():
+                leads.with_user(self.requester).action_archive()
+            self.assertTrue(ordinary.active)
+            self.assertTrue(self.lead_a.active)
 
     def test_superuser_cross_campaign_transfer_is_governed(self):
         target_profile = self.Profile.with_user(self.requester).create_from_partner(

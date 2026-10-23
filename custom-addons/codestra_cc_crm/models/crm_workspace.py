@@ -514,6 +514,21 @@ class CrmLead(models.Model):
             raise AccessError(_("Operational users cannot bypass the customer profile."))
         return super().write(values)
 
+    def _pls_increment_frequencies(self, from_state=None, to_state=None):
+        governed = self.filtered("cc_contact_center_record")
+        if governed:
+            # The lead mutation must remain authorized as the original caller.
+            # Odoo's private scoring bookkeeping reads cross-campaign aggregates
+            # before updating them with sudo. Keep those aggregates internal:
+            # operational roles must not gain Sales or scoring-table access.
+            governed.check_access("write")
+            super(CrmLead, governed.sudo())._pls_increment_frequencies(
+                from_state=from_state, to_state=to_state
+            )
+        return super(CrmLead, self - governed)._pls_increment_frequencies(
+            from_state=from_state, to_state=to_state
+        )
+
     def action_callcenter_assign_agent(self, target_user_id):
         if not (_is_supervisor(self.env.user) or _is_global_admin(self.env.user)):
             raise AccessError(_("Only a supervisor or Call Center Super User may assign leads."))
