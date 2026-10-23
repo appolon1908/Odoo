@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_callcenter_root" name="Call Center" sequence="18"
+              groups="callcenter_crm.group_callcenter_agent,callcenter_crm.group_callcenter_supervisor,callcenter_crm.group_callcenter_superuser"/>
+
+    <menuitem id="menu_callcenter_overview" name="Campaign Overview"
+              parent="menu_callcenter_root" action="action_callcenter_campaigns"
+              sequence="5"/>
+
+    <menuitem id="menu_callcenter_agent" name="Agent" parent="menu_callcenter_root" sequence="10"
+              groups="callcenter_crm.group_callcenter_agent"/>
+    <menuitem id="menu_callcenter_my_leads" name="My Leads" parent="menu_callcenter_agent"
+              action="action_callcenter_my_leads" sequence="10"/>
+    <menuitem id="menu_callcenter_create_lead" name="Create Lead" parent="menu_callcenter_agent"
+              action="action_callcenter_create_lead" sequence="20"/>
+    <menuitem id="menu_callcenter_get_next_lead" name="Get Next Lead" parent="menu_callcenter_agent"
+              action="action_callcenter_get_next_lead" sequence="30"/>
+    <menuitem id="menu_callcenter_my_campaign" name="My Campaign" parent="menu_callcenter_agent"
+              action="action_callcenter_campaigns" sequence="40"/>
+
+    <menuitem id="menu_callcenter_supervisor" name="Supervisor" parent="menu_callcenter_root" sequence="20"
+              groups="callcenter_crm.group_callcenter_supervisor"/>
+    <menuitem id="menu_callcenter_supervisor_campaigns" name="My Campaigns" parent="menu_callcenter_supervisor"
+              action="action_callcenter_campaigns" sequence="10"/>
+    <menuitem id="menu_callcenter_supervisor_agents" name="Campaign Agents" parent="menu_callcenter_supervisor"
+              action="action_callcenter_assignments" sequence="20"/>
+    <menuitem id="menu_callcenter_supervisor_leads" name="Campaign Leads" parent="menu_callcenter_supervisor"
+              action="action_callcenter_campaign_leads" sequence="30"/>
+
+    <menuitem id="menu_callcenter_admin" name="Administration" parent="menu_callcenter_root" sequence="30"
+              groups="callcenter_crm.group_callcenter_superuser"/>
+    <menuitem id="menu_callcenter_campaigns" name="Campaigns" parent="menu_callcenter_admin"
+              action="action_callcenter_campaigns" sequence="10"/>
+    <menuitem id="menu_callcenter_assignments" name="Assignments" parent="menu_callcenter_admin"
+              action="action_callcenter_assignments" sequence="20"/>
+    <menuitem id="menu_callcenter_transfer_agent" name="Transfer Agent" parent="menu_callcenter_admin"
+              action="action_callcenter_agent_transfer_wizard" sequence="25"/>
+    <menuitem id="menu_callcenter_all_leads" name="All Leads" parent="menu_callcenter_admin"
+              action="action_callcenter_all_leads" sequence="30"/>
+    <menuitem id="menu_callcenter_import" name="Lead Imports" parent="menu_callcenter_admin"
+              action="action_callcenter_lead_import_wizard" sequence="40"/>
+    <menuitem id="menu_callcenter_import_history" name="Import History" parent="menu_callcenter_admin"
+              action="action_callcenter_import_history" sequence="50"/>
+    <menuitem id="menu_callcenter_audit" name="Campaign Audit" parent="menu_callcenter_admin"
+              action="action_callcenter_state_audit" sequence="60"/>
+    <menuitem id="menu_callcenter_lead_history" name="Lead Assignment History" parent="menu_callcenter_admin"
+              action="action_callcenter_lead_assignment_history" sequence="70"/>
+    <menuitem id="menu_callcenter_role_admin" name="Role Administration" parent="menu_callcenter_admin"
+              action="action_callcenter_role_assignment_wizard" sequence="80"/>
+</odoo>
